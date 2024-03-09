@@ -1,0 +1,11 @@
+{
+  "version": "3",
+  "remote": {
+    "https://deno.land/std@0.176.0/encoding/hex.ts": "50f8c95b52eae24395d3dfcb5ec1ced37c5fe7610ef6fffdcc8b0fdc38e3b32f",
+    "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/ende.ts": "f41dbfd0f31db12757dab2f4f51ece0c0bd6cb8ba3057d0a154b7f388d85e827",
+    "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/key.ts": "b9e8a1e5a446168ad93372adc299101d2be2760bd4a18c2853a8a267aa5f3f54",
+    "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/nostr.ts": "1e8ba1b6d54cd21ac01e5a2fd1623a248c2a76c1c6194388a9809e1863c1c762",
+    "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/scure.js": "fbc4be16918272bd167fff1184a7f5bbd1a676bad2a73130bb530d78df893a99",
+    "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/vendor/secp256k1.js": "69e32f6c686cc651ff2e6d4d22ed6e9b6f86b38311b405b47b2abdf3cb98eb4d"
+  }
+}
