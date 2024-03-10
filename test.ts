@@ -1,0 +1,266 @@
+// deno-lint-ignore-file no-empty
+import { Relay, run } from "./main.tsx";
+import { assertEquals } from "https://deno.land/std@0.202.0/assert/assert_equals.ts";
+import { assertIsError } from "https://deno.land/std@0.202.0/assert/mod.ts";
+import { fail } from "https://deno.land/std@0.202.0/assert/fail.ts";
+import {
+    InMemoryAccountContext,
+    NostrEvent,
+    NostrKind,
+    prepareNormalNostrEvent,
+    RelayRejectedEvent,
+    RelayResponse_Event,
+    SingleRelayConnection,
+    SubscriptionStream,
+} from "./_libs.ts";
+import * as client_test from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/relay-single-test.ts";
+import * as client_nip9_test from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/nip9-test.ts";
+
+const test_kv = async () => {
+    try {
+        await Deno.remove("test.sqlite");
+    } catch (e) {}
+    return await Deno.openKv("test.sqlite");
+};
+
+const test_ctx = InMemoryAccountContext.Generate();
+const test_auth_event = async () => {
+    const event = await prepareNormalNostrEvent(test_ctx, {
+        kind: NostrKind.TEXT_NOTE,
+        content: "",
+    });
+    return btoa(JSON.stringify(event));
+};
+
+// Need to keep consistent with resolvers/nip11.ts
+const not_modifiable_information = {
+    software: "https://github.com/BlowaterNostr/relayed",
+    supported_nips: [1, 2, 11],
+    version: "RC5",
+};
+
+Deno.test("main", async (t) => {
+    const relay = await run({
+        port: 8080,
+        default_information: {
+            pubkey: test_ctx.publicKey.hex,
+        },
+        default_policy: {
+            allowed_kinds: [NostrKind.Long_Form, NostrKind.Encrypted_Custom_App_Data],
+        },
+        kv: await test_kv(),
+    }) as Relay;
+
+    const policy = await relay.get_policy(NostrKind.CONTACTS);
+    assertEquals(policy, {
+        allow: new Set(),
+        block: new Set(),
+        kind: NostrKind.CONTACTS,
+        read: false,
+        write: false,
+    });
+
+    // relay logic
+    const ctx = InMemoryAccountContext.Generate();
+    const client = SingleRelayConnection.New(relay.url, { log: false });
+
+    {
+        // because default policy allows no kinds
+        const err = await client.sendEvent(await randomEvent(ctx));
+        assertEquals(err instanceof RelayRejectedEvent, true);
+    }
+    {
+        await relay.set_policy({
+            kind: NostrKind.TEXT_NOTE,
+            read: false,
+            write: true,
+        });
+        const event_sent = await randomEvent(ctx);
+        const err = await client.sendEvent(event_sent);
+        if (err instanceof Error) fail(err.message);
+
+        const event_got = await client.getEvent(event_sent.id);
+        assertEquals(event_got, undefined);
+
+        await relay.set_policy({ kind: NostrKind.TEXT_NOTE, read: true });
+        const event_got_2 = await client.getEvent(event_sent.id);
+        assertEquals(event_got_2, event_sent);
+    }
+    {
+        await relay.set_policy({
+            kind: NostrKind.CONTACTS,
+            read: true,
+            write: true,
+        });
+        const event_1 = await randomEvent(ctx, NostrKind.CONTACTS, "1");
+        const event_2 = await randomEvent(ctx, NostrKind.CONTACTS, "2");
+        const event_3 = await randomEvent(ctx, NostrKind.CONTACTS, "3");
+
+        const err_1 = await client.sendEvent(event_1);
+        if (err_1 instanceof Error) fail(err_1.message);
+
+        const err_2 = await client.sendEvent(event_2);
+        if (err_2 instanceof Error) fail(err_2.message);
+
+        const err_3 = await client.sendEvent(event_3);
+        if (err_3 instanceof Error) fail(err_3.message);
+
+        const stream = await client.newSub("get kind 3", {
+            kinds: [NostrKind.CONTACTS],
+        }) as SubscriptionStream;
+
+        const events: NostrEvent[] = [];
+
+        for await (const msg of stream.chan) {
+            if (msg.type == "EVENT") {
+                events.push(msg.event);
+            } else if (msg.type == "EOSE") {
+                await stream.chan.close();
+            }
+        }
+
+        assertEquals(events.length, 3);
+        // todo: assert content
+    }
+    {
+        const ctx1 = InMemoryAccountContext.Generate();
+        const event_1 = await randomEvent(ctx1, NostrKind.TEXT_NOTE, "1");
+
+        await client.sendEvent(event_1);
+
+        const stream = await client.newSub("get author", {
+            authors: [ctx1.publicKey.hex],
+        }) as SubscriptionStream;
+
+        const msg = await stream.chan.pop() as RelayResponse_Event;
+        assertEquals(msg.event, event_1);
+    }
+
+    await t.step("block pubkey", async () => {
+        const ctx1 = InMemoryAccountContext.Generate();
+        const event_1 = await randomEvent(ctx1, NostrKind.TEXT_NOTE, "1");
+
+        await relay.set_policy({
+            kind: event_1.kind,
+            block: new Set([ctx1.publicKey.hex]),
+        });
+
+        const err = await client.sendEvent(event_1);
+        assertIsError(err, Error);
+    });
+
+    await t.step("client_test", async () => {
+        await client_test.limit(relay.url)();
+        await client_test.no_event(relay.url)();
+        await client_test.newSub_multiple_filters(relay.url)();
+        await client_test.two_clients_communicate(relay.url)();
+        await client_test.get_event_by_id(relay.url)();
+        await client_test.close_sub_keep_reading(relay.url)();
+        await client_test.get_correct_kind(relay.url)();
+    });
+
+    await client.close();
+    await relay.shutdown();
+});
+
+// https://github.com/nostr-protocol/nips/blob/master/01.md#kinds
+
+// https://github.com/nostr-protocol/nips/blob/master/11.md
+Deno.test("NIP-11: Relay Information Document", async (t) => {
+    const relay = await run({
+        port: 8080,
+        default_policy: {
+            allowed_kinds: "none",
+        },
+        default_information: {
+            name: "Nostr Relay",
+            pubkey: test_ctx.publicKey.hex,
+        },
+        kv: await test_kv(),
+    }) as Relay;
+
+    await t.step("get relay information", async () => {
+        const information = await relay.get_relay_information();
+        assertEquals(information, {
+            name: "Nostr Relay",
+            pubkey: test_ctx.publicKey,
+            ...not_modifiable_information,
+        });
+    });
+
+    await t.step("set relay information", async () => {
+        await relay.set_relay_information({
+            name: "Nostr Relay2",
+        });
+
+        const information2 = await relay.get_relay_information();
+        assertEquals(information2, {
+            name: "Nostr Relay2",
+            // @ts-ignore
+            pubkey: {
+                hex: test_ctx.publicKey.hex,
+            },
+            ...not_modifiable_information,
+        });
+    });
+
+    await t.step("graphql get relay information", async () => {
+        const query = await Deno.readTextFile("./queries/getRelayInformation.gql");
+        const json = await queryGql(relay, query);
+        console.log("graphql get relay information queryGql json:", json);
+        assertEquals(json.data.relayInformation, {
+            name: "Nostr Relay2",
+            icon: null,
+            contact: null,
+            description: null,
+            pubkey: {
+                hex: test_ctx.publicKey.hex,
+            },
+            ...not_modifiable_information,
+        });
+    });
+
+    await t.step("graphql set relay information", async () => {
+        const variables = {
+            name: "Nostr Relay3",
+        };
+        const query = await Deno.readTextFile("./queries/setRelayInformation.gql");
+        const json = await queryGql(relay, query, variables);
+        console.log("graphql set relay information queryGql json:", json);
+        assertEquals(json.data.set_relay_information, {
+            name: "Nostr Relay3",
+            icon: null,
+            contact: null,
+            description: null,
+            pubkey: {
+                hex: test_ctx.publicKey.hex,
+            },
+            ...not_modifiable_information,
+        });
+    });
+
+    await relay.shutdown();
+});
+
+async function randomEvent(ctx: InMemoryAccountContext, kind?: NostrKind, content?: string) {
+    const event = await prepareNormalNostrEvent(ctx, {
+        kind: kind || NostrKind.TEXT_NOTE,
+        content: content || "",
+    });
+    return event;
+}
+
+async function queryGql(relay: Relay, query: string, variables?: object) {
+    const { hostname, port } = new URL(relay.url);
+    const token = await test_auth_event();
+    console.log("queryGql token:", token);
+    const res = await fetch(`http://${hostname}:${port}/api`, {
+        method: "POST",
+        headers: {
+            "Cookie": `token=${token};`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ query, variables }),
+    });
+    return await res.json();
+}

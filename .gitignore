@@ -1,1 +1,13 @@
+# dotenv environment variable files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
 .DS_Store
+deploy/default.ts
+*cov_profile*
+coverage
+test.sqlite
+node_modules

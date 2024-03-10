@@ -1,0 +1,30 @@
+name: test
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["*"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    timeout-minutes: 1
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        deno-version: [1.41.0]
+
+    steps:
+      - name: Setup repo
+        uses: actions/checkout@v3
+        with:
+          submodules: 'true'
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v1
+
+      - name: Run tests
+        run: deno task test
