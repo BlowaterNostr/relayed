@@ -16,20 +16,24 @@ export function run(deps: {
             return new Response(null, { status: 501 });
         }
 
+        const sockets = new Set<WebSocket>();
         const { socket, response } = Deno.upgradeWebSocket(req);
 
-        socket.onopen = (e) => {
+        socket.onopen = ((socket: WebSocket) => (e) => {
             console.log("a client connected!");
-        };
+            sockets.add(socket);
+        })(socket);
 
-        socket.addEventListener(
-            "message",
-            onMessage({
-                socket,
-                event_db: deps.eventStore,
-                requested_subscriptions: new Map(),
-            }),
-        );
+        socket.onclose = ((socket: WebSocket) => (e) => {
+            console.log("delete", socket);
+            sockets.delete(socket);
+        })(socket);
+
+        socket.onmessage = onMessage({
+            sockets,
+            event_db: deps.eventStore,
+            requested_subscriptions: new Map(),
+        });
 
         return response;
     });
@@ -37,16 +41,16 @@ export function run(deps: {
 
 export interface EventDatabase {
     has(id: string): Promise<boolean> | boolean;
-    set(id: string, event: NostrEvent): Promise<EventDatabase> | EventDatabase;
-    filter(filter: NostrFilters): AsyncIterable<NostrEvent>
+    set(event: NostrEvent): Promise<EventDatabase> | EventDatabase;
+    filter(filter: NostrFilters): AsyncIterable<NostrEvent>;
 }
 
 function onMessage(deps: {
-    socket: WebSocket;
+    sockets: Set<WebSocket>;
     event_db: EventDatabase;
     requested_subscriptions: Map<string, NostrFilters>;
 }) {
-    const { event_db, socket, requested_subscriptions } = deps;
+    const { event_db, sockets, requested_subscriptions } = deps;
 
     return async (event: MessageEvent<string>) => {
         console.log(event.data);
@@ -58,15 +62,18 @@ function onMessage(deps: {
                 return;
             }
             const event = nostr_ws_msg[1];
-            await event_db.set(id, event);
-            socket.send(JSON.stringify(respond_ok(event, true, "")))
+            await event_db.set(event);
+            send(sockets, JSON.stringify(respond_ok(event, true, "")));
             for (
                 const matched of matchEventWithSubscriptions(
                     event,
                     requested_subscriptions,
                 )
             ) {
-                socket.send(JSON.stringify(respond_event(matched.sub_id, event)));
+                send(
+                    sockets,
+                    JSON.stringify(respond_event(matched.sub_id, event)),
+                );
             }
         } else if (cmd == "REQ") {
             const sub_id = nostr_ws_msg[1];
@@ -78,9 +85,10 @@ function onMessage(deps: {
                     requested_subscriptions,
                 )
             ) {
-                const res = JSON.stringify(respond_event(matched.sub_id, matched.event))
-                console.log(res)
-                socket.send(res);
+                const res = JSON.stringify(
+                    respond_event(matched.sub_id, matched.event),
+                );
+                send(sockets, res);
             }
         } else if (cmd == "CLOSE") {
         } else {
@@ -89,21 +97,31 @@ function onMessage(deps: {
     };
 }
 
-function respond_event(sub_id: string, event: NostrEvent): _RelayResponse_Event {
+function respond_event(
+    sub_id: string,
+    event: NostrEvent,
+): _RelayResponse_Event {
     return ["EVENT", sub_id, event];
 }
 
-function respond_ok(event: NostrEvent, ok: boolean, message: string): _RelayResponse_OK {
+function respond_ok(
+    event: NostrEvent,
+    ok: boolean,
+    message: string,
+): _RelayResponse_OK {
     return ["OK", event.id, ok, message];
 }
 
-async function* matchAllEventsWithSubcriptions(events: EventDatabase, subscriptions: Map<string, NostrFilters>) {
+async function* matchAllEventsWithSubcriptions(
+    events: EventDatabase,
+    subscriptions: Map<string, NostrFilters>,
+) {
     for (const [sub_id, filter] of subscriptions) {
-        for await( const event of events.filter(filter)) {
+        for await (const event of events.filter(filter)) {
             yield {
                 sub_id,
-                event
-            }
+                event,
+            };
         }
     }
 }
@@ -116,7 +134,7 @@ function* matchEventWithSubscriptions(
         if (isMatched(event, filter)) {
             yield {
                 sub_id,
-                event
+                event,
             };
         }
     }
@@ -130,4 +148,11 @@ function isMatched(event: NostrEvent, filter: NostrFilters) {
         filter["#e"]?.includes(event.id);
     // filter.since
     // filter.until
+}
+
+function send(sockets: Set<WebSocket>, data: string) {
+    for (const socket of sockets) {
+        console.log(sockets.size, "send", data, "to", socket);
+        socket.send(data);
+    }
 }
