@@ -9,6 +9,7 @@ import {
 export function run(deps: {
     eventStore: EventDatabase;
 }) {
+    const sockets = new Set<WebSocket>();
     return Deno.serve({
         port: 8080,
     }, (req) => {
@@ -16,7 +17,6 @@ export function run(deps: {
             return new Response(null, { status: 501 });
         }
 
-        const sockets = new Set<WebSocket>();
         const { socket, response } = Deno.upgradeWebSocket(req);
 
         socket.onopen = ((socket: WebSocket) => (e) => {
