@@ -1,5 +1,44 @@
 {
+    "tasks": {
+        "run": "deno run --allow-net --allow-env --unstable deploy/default.ts",
+        "test": "deno test --allow-net --unstable --allow-read --allow-write --coverage test.ts"
+    },
+    "lint": {
+        "rules": {
+            "tags": [
+                "fresh",
+                "recommended"
+            ],
+            "exclude": ["require-await", "require-yield", "no-unused-vars"]
+        }
+    },
+    "exclude": [
+        "**/_fresh/*"
+    ],
+    "imports": {
+        "$fresh/": "https://deno.land/x/fresh@1.6.7/",
+        "preact": "https://esm.sh/preact@10.19.6",
+        "preact/": "https://esm.sh/preact@10.19.6/",
+        "@preact/signals": "https://esm.sh/*@preact/signals@1.2.2",
+        "@preact/signals-core": "https://esm.sh/*@preact/signals-core@1.5.1",
+        "tailwindcss": "npm:tailwindcss@3.4.1",
+        "tailwindcss/": "npm:/tailwindcss@3.4.1/",
+        "tailwindcss/plugin": "npm:/tailwindcss@3.4.1/plugin.js",
+        "$std/": "https://deno.land/std@0.216.0/"
+    },
+    "compilerOptions": {
+        "jsx": "react-jsx",
+        "jsxImportSource": "preact",
+        "lib": [
+            "deno.unstable"
+        ],
+        "noImplicitAny": false
+    },
+    "nodeModulesDir": true,
     "fmt": {
-        "indentWidth": 4
-    }
+        "indentWidth": 4,
+        "lineWidth": 110,
+        "exclude": ["cov_profile", "coverage"]
+    },
+    "lock": false
 }
