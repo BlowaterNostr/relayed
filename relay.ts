@@ -1,9 +1,11 @@
 import {
+    _RelayResponse_EOSE,
     _RelayResponse_Event,
     _RelayResponse_OK,
     ClientRequest_Message,
     NostrEvent,
     NostrFilters,
+    verifyEvent,
 } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/nostr.ts";
 
 export function run(deps: {
@@ -25,7 +27,6 @@ export function run(deps: {
         })(socket);
 
         socket.onclose = ((socket: WebSocket) => (e) => {
-            console.log("delete", socket);
             sockets.delete(socket);
         })(socket);
 
@@ -62,6 +63,14 @@ function onMessage(deps: {
                 return;
             }
             const event = nostr_ws_msg[1];
+            const ok = await verifyEvent(event);
+            if (!ok) {
+                return send(
+                    sockets,
+                    JSON.stringify(respond_ok(event, false, "invalid event")),
+                );
+            }
+            console.log(nostr_ws_msg);
             await event_db.set(event);
             send(sockets, JSON.stringify(respond_ok(event, true, "")));
             for (
@@ -112,6 +121,10 @@ function respond_ok(
     return ["OK", event.id, ok, message];
 }
 
+function respond_eose(sub_id: string): _RelayResponse_EOSE {
+    return ["EOSE", sub_id];
+}
+
 async function* matchAllEventsWithSubcriptions(
     events: EventDatabase,
     subscriptions: Map<string, NostrFilters>,
@@ -140,19 +153,26 @@ function* matchEventWithSubscriptions(
     }
 }
 
-function isMatched(event: NostrEvent, filter: NostrFilters) {
-    return filter.kinds?.includes(event.kind) ||
-        filter.authors?.includes(event.pubkey) ||
-        filter.ids?.includes(event.id) ||
-        filter["#p"]?.includes(event.pubkey) ||
-        filter["#e"]?.includes(event.id);
+export function isMatched(event: NostrEvent, filter: NostrFilters) {
+    const kinds = filter.kinds || [];
+    const authors = filter.authors || [];
+    const ids = filter.ids || [];
+    const ps = filter["#p"] || [];
+    const es = filter["#e"] || [];
+    return kinds.includes(event.kind) ||
+        authors.includes(event.pubkey) ||
+        ids.includes(event.id) ||
+        ps.includes(event.pubkey) ||
+        es.includes(event.id) ||
+        (kinds.length == 0 && authors.length == 0 && ids.length == 0 &&
+            ps.length == 0 && es.length == 0);
     // filter.since
     // filter.until
 }
 
 function send(sockets: Set<WebSocket>, data: string) {
     for (const socket of sockets) {
-        console.log(sockets.size, "send", data, "to", socket);
+        console.log(sockets.size, "send", data);
         socket.send(data);
     }
 }
