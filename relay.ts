@@ -12,6 +12,13 @@ export function run(deps: {
     eventStore: EventDatabase;
 }) {
     const connections = new Map<WebSocket, Map<string, NostrFilters>>();
+    Deno.addSignalListener("SIGINT", () => {
+        for (const socket of connections.keys()) {
+            socket.close();
+        }
+        Deno.exit();
+    });
+
     return Deno.serve({
         port: 8080,
     }, (req) => {
@@ -48,7 +55,7 @@ export interface EventDatabase {
 }
 
 function onMessage(deps: {
-    this_socket: WebSocket
+    this_socket: WebSocket;
     connections: Map<WebSocket, Map<string, NostrFilters>>;
     event_db: EventDatabase;
 }) {
@@ -131,15 +138,15 @@ async function* matchAllEventsWithSubcriptions(
     events: EventDatabase,
     connections: Map<WebSocket, Map<string, NostrFilters>>,
 ) {
-    const all_events = []
+    const all_events = [];
     for await (const event of events.all()) {
-        all_events.push(event)
+        all_events.push(event);
     }
-    for(const [socket, subscriptions] of connections) {
+    for (const [socket, subscriptions] of connections) {
         for (const [sub_id, filter] of subscriptions) {
             let i = 0;
             for await (const event of all_events) {
-                if(isMatched(event, filter)) {
+                if (isMatched(event, filter)) {
                     yield {
                         socket,
                         sub_id,
@@ -159,7 +166,7 @@ function* matchEventWithSubscriptions(
     event: NostrEvent,
     connections: Map<WebSocket, Map<string, NostrFilters>>,
 ) {
-    for(const [socket, subscriptions] of connections) {
+    for (const [socket, subscriptions] of connections) {
         for (const [sub_id, filter] of subscriptions) {
             if (isMatched(event, filter)) {
                 yield {
