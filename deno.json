@@ -1,6 +1,7 @@
 {
     "fmt": {
-        "indentWidth": 4
+        "indentWidth": 4,
+        "lineWidth": 110
     },
     "tasks": {
         "run": "deno run --allow-net --unstable deploy/deno_deploy.ts",

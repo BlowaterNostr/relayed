@@ -165,15 +165,25 @@ export function isMatched(event: NostrEvent, filter: NostrFilters) {
     const ids = filter.ids || [];
     const ps = filter["#p"] || [];
     const es = filter["#e"] || [];
-    return kinds.includes(event.kind) ||
-        authors.includes(event.pubkey) ||
-        ids.includes(event.id) ||
-        ps.includes(event.pubkey) ||
-        es.includes(event.id) ||
+
+    const match_kind = kinds.length == 0 ? true : kinds.includes(event.kind);
+    const match_author = authors.length == 0 ? true : authors.includes(event.pubkey);
+    const match_id = ids.length == 0 ? true : ids.includes(event.id);
+    const match_p_tag = ps.length == 0 ? true : ps.includes(event.pubkey);
+    const match_e_tag = es.length == 0 ? true : es.includes(event.id);
+    const res = (
+        match_kind &&
+        match_author &&
+        match_id &&
+        match_p_tag &&
+        match_e_tag
+    ) ||
         (kinds.length == 0 && authors.length == 0 && ids.length == 0 &&
             ps.length == 0 && es.length == 0);
     // filter.since
     // filter.until
+
+    return res;
 }
 
 function send(sockets: Set<WebSocket>, data: string) {
