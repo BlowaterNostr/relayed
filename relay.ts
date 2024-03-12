@@ -11,7 +11,7 @@ import {
 export function run(deps: {
     eventStore: EventDatabase;
 }) {
-    const sockets = new Set<WebSocket>();
+    const connections = new Map<WebSocket, Map<string, NostrFilters>>();
     return Deno.serve({
         port: 8080,
     }, (req) => {
@@ -23,17 +23,17 @@ export function run(deps: {
 
         socket.onopen = ((socket: WebSocket) => (e) => {
             console.log("a client connected!");
-            sockets.add(socket);
+            connections.set(socket, new Map());
         })(socket);
 
         socket.onclose = ((socket: WebSocket) => (e) => {
-            sockets.delete(socket);
+            connections.delete(socket);
         })(socket);
 
         socket.onmessage = onMessage({
-            sockets,
+            this_socket: socket,
+            connections,
             event_db: deps.eventStore,
-            requested_subscriptions: new Map(),
         });
 
         return response;
@@ -47,11 +47,11 @@ export interface EventDatabase {
 }
 
 function onMessage(deps: {
-    sockets: Set<WebSocket>;
+    this_socket: WebSocket
+    connections: Map<WebSocket, Map<string, NostrFilters>>;
     event_db: EventDatabase;
-    requested_subscriptions: Map<string, NostrFilters>;
 }) {
-    const { event_db, sockets, requested_subscriptions } = deps;
+    const { event_db, this_socket, connections } = deps;
 
     return async (event: MessageEvent<string>) => {
         console.log(event.data);
@@ -66,40 +66,40 @@ function onMessage(deps: {
             const ok = await verifyEvent(event);
             if (!ok) {
                 return send(
-                    sockets,
+                    this_socket,
                     JSON.stringify(respond_ok(event, false, "invalid event")),
                 );
             }
             console.log(nostr_ws_msg);
             await event_db.set(event);
-            send(sockets, JSON.stringify(respond_ok(event, true, "")));
+            send(this_socket, JSON.stringify(respond_ok(event, true, "")));
             for (
                 const matched of matchEventWithSubscriptions(
                     event,
-                    requested_subscriptions,
+                    connections,
                 )
             ) {
                 send(
-                    sockets,
+                    matched.socket,
                     JSON.stringify(respond_event(matched.sub_id, event)),
                 );
             }
         } else if (cmd == "REQ") {
             const sub_id = nostr_ws_msg[1];
             const filter = nostr_ws_msg[2];
-            requested_subscriptions.set(sub_id, filter);
+            connections.get(this_socket)?.set(sub_id, filter);
             for await (
                 const matched of matchAllEventsWithSubcriptions(
                     event_db,
-                    requested_subscriptions,
+                    connections,
                 )
             ) {
                 const res = JSON.stringify(
                     respond_event(matched.sub_id, matched.event),
                 );
-                send(sockets, res);
+                send(matched.socket, res);
             }
-            send(sockets, JSON.stringify(respond_eose(sub_id)));
+            send(this_socket, JSON.stringify(respond_eose(sub_id)));
         } else if (cmd == "CLOSE") {
         } else {
             console.log("not implemented", event.data);
@@ -128,18 +128,21 @@ function respond_eose(sub_id: string): _RelayResponse_EOSE {
 
 async function* matchAllEventsWithSubcriptions(
     events: EventDatabase,
-    subscriptions: Map<string, NostrFilters>,
+    connections: Map<WebSocket, Map<string, NostrFilters>>,
 ) {
-    for (const [sub_id, filter] of subscriptions) {
-        let i = 0;
-        for await (const event of events.filter(filter)) {
-            yield {
-                sub_id,
-                event,
-            };
-            i++;
-            if (i == filter.limit) {
-                break;
+    for(const [socket, subscriptions] of connections) {
+        for (const [sub_id, filter] of subscriptions) {
+            let i = 0;
+            for await (const event of events.filter(filter)) {
+                yield {
+                    socket,
+                    sub_id,
+                    event,
+                };
+                i++;
+                if (i == filter.limit) {
+                    break;
+                }
             }
         }
     }
@@ -147,14 +150,17 @@ async function* matchAllEventsWithSubcriptions(
 
 function* matchEventWithSubscriptions(
     event: NostrEvent,
-    subscriptions: Map<string, NostrFilters>,
+    connections: Map<WebSocket, Map<string, NostrFilters>>,
 ) {
-    for (const [sub_id, filter] of subscriptions) {
-        if (isMatched(event, filter)) {
-            yield {
-                sub_id,
-                event,
-            };
+    for(const [socket, subscriptions] of connections) {
+        for (const [sub_id, filter] of subscriptions) {
+            if (isMatched(event, filter)) {
+                yield {
+                    socket,
+                    sub_id,
+                    event,
+                };
+            }
         }
     }
 }
@@ -186,11 +192,8 @@ export function isMatched(event: NostrEvent, filter: NostrFilters) {
     return res;
 }
 
-function send(sockets: Set<WebSocket>, data: string) {
-    for (const socket of sockets) {
-        console.log(sockets.size, "send", data);
-        if (socket.readyState == socket.OPEN) {
-            socket.send(data);
-        }
+function send(socket: WebSocket, data: string) {
+    if (socket.readyState == socket.OPEN) {
+        socket.send(data);
     }
 }
