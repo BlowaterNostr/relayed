@@ -99,6 +99,7 @@ function onMessage(deps: {
                 );
                 send(sockets, res);
             }
+            send(sockets, JSON.stringify(respond_eose(sub_id)));
         } else if (cmd == "CLOSE") {
         } else {
             console.log("not implemented", event.data);
@@ -130,11 +131,16 @@ async function* matchAllEventsWithSubcriptions(
     subscriptions: Map<string, NostrFilters>,
 ) {
     for (const [sub_id, filter] of subscriptions) {
+        let i = 0;
         for await (const event of events.filter(filter)) {
             yield {
                 sub_id,
                 event,
             };
+            i++;
+            if (i == filter.limit) {
+                break;
+            }
         }
     }
 }
@@ -173,6 +179,8 @@ export function isMatched(event: NostrEvent, filter: NostrFilters) {
 function send(sockets: Set<WebSocket>, data: string) {
     for (const socket of sockets) {
         console.log(sockets.size, "send", data);
-        socket.send(data);
+        if (socket.readyState == socket.OPEN) {
+            socket.send(data);
+        }
     }
 }
