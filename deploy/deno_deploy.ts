@@ -27,6 +27,12 @@ const eventStore: EventDatabase = {
             }
         }
     },
+    all: async function* () {
+        for await (const entry of kv.list<NostrEvent>({ prefix: [] })) {
+            const event = entry.value;
+            yield event;
+        }
+    },
 };
 
 run({ eventStore });

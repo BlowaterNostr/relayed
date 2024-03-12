@@ -44,6 +44,7 @@ export interface EventDatabase {
     has(id: string): Promise<boolean> | boolean;
     set(event: NostrEvent): Promise<EventDatabase> | EventDatabase;
     filter(filter: NostrFilters): AsyncIterable<NostrEvent>;
+    all(): AsyncIterable<NostrEvent>;
 }
 
 function onMessage(deps: {
@@ -130,18 +131,24 @@ async function* matchAllEventsWithSubcriptions(
     events: EventDatabase,
     connections: Map<WebSocket, Map<string, NostrFilters>>,
 ) {
+    const all_events = []
+    for await (const event of events.all()) {
+        all_events.push(event)
+    }
     for(const [socket, subscriptions] of connections) {
         for (const [sub_id, filter] of subscriptions) {
             let i = 0;
-            for await (const event of events.filter(filter)) {
-                yield {
-                    socket,
-                    sub_id,
-                    event,
-                };
-                i++;
-                if (i == filter.limit) {
-                    break;
+            for await (const event of all_events) {
+                if(isMatched(event, filter)) {
+                    yield {
+                        socket,
+                        sub_id,
+                        event,
+                    };
+                    i++;
+                    if (i == filter.limit) {
+                        break;
+                    }
                 }
             }
         }
