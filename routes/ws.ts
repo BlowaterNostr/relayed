@@ -1,6 +1,10 @@
+// deno-lint-ignore-file no-unused-vars
+/// <reference lib="deno.unstable" />
+import { PublicKey } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/key.ts";
 import {
     _RelayResponse_EOSE,
     _RelayResponse_Event,
+    _RelayResponse_Notice,
     _RelayResponse_OK,
     ClientRequest_Message,
     NostrEvent,
@@ -8,20 +12,24 @@ import {
     verifyEvent,
 } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/nostr.ts";
 
-export function run(deps: {
-    eventStore: EventDatabase;
-}) {
-    const connections = new Map<WebSocket, Map<string, NostrFilters>>();
-    Deno.addSignalListener("SIGINT", () => {
-        for (const socket of connections.keys()) {
-            socket.close();
-        }
-        Deno.exit();
-    });
+import { Handler } from "$fresh/server.ts";
+import { kv } from "./index.tsx";
 
-    return Deno.serve({
-        port: 8080,
-    }, (req) => {
+export const handler: Handler = (req: Request) => {
+    return ws_handler(req)
+}
+
+const connections = new Map<WebSocket, Map<string, NostrFilters>>();
+Deno.addSignalListener("SIGINT", () => {
+    for (const socket of connections.keys()) {
+        socket.close();
+    }
+    Deno.exit();
+});
+
+export const ws_handler = (req: Request) => {
+
+
         if (req.headers.get("upgrade") != "websocket") {
             return new Response(null, { status: 501 });
         }
@@ -38,14 +46,16 @@ export function run(deps: {
         })(socket);
 
         socket.onmessage = onMessage({
+            ...deps,
             this_socket: socket,
             connections,
             event_db: deps.eventStore,
         });
 
         return response;
-    });
+
 }
+
 
 export interface EventDatabase {
     has(id: string): Promise<boolean> | boolean;
@@ -54,10 +64,13 @@ export interface EventDatabase {
     all(): AsyncIterable<NostrEvent>;
 }
 
+type func_FilterPolicy = (filter: NostrFilters) => { type: "reject"; reason: string } | { type: true };
+
 function onMessage(deps: {
     this_socket: WebSocket;
     connections: Map<WebSocket, Map<string, NostrFilters>>;
     event_db: EventDatabase;
+    filterPolicy?: func_FilterPolicy;
 }) {
     const { event_db, this_socket, connections } = deps;
 
@@ -95,6 +108,13 @@ function onMessage(deps: {
         } else if (cmd == "REQ") {
             const sub_id = nostr_ws_msg[1];
             const filter = nostr_ws_msg[2];
+            if (deps.filterPolicy) {
+                const ok = deps.filterPolicy(filter);
+                if (ok.type == "reject") {
+                    send(deps.this_socket, JSON.stringify(respond_notice(ok.reason)));
+                    return;
+                }
+            }
             connections.get(this_socket)?.set(sub_id, filter);
             for await (
                 const matched of matchAllEventsWithSubcriptions(
@@ -108,7 +128,9 @@ function onMessage(deps: {
                 send(matched.socket, res);
             }
             send(this_socket, JSON.stringify(respond_eose(sub_id)));
+        // deno-lint-ignore no-empty
         } else if (cmd == "CLOSE") {
+
         } else {
             console.log("not implemented", event.data);
         }
@@ -132,6 +154,10 @@ function respond_ok(
 
 function respond_eose(sub_id: string): _RelayResponse_EOSE {
     return ["EOSE", sub_id];
+}
+
+function respond_notice(message: string): _RelayResponse_Notice {
+    return ["NOTICE", message];
 }
 
 async function* matchAllEventsWithSubcriptions(
@@ -211,3 +237,36 @@ function send(socket: WebSocket, data: string) {
         socket.send(data);
     }
 }
+
+const eventStore: EventDatabase = {
+    has: async (id: string) => {
+        const entry = await kv.get<NostrEvent>([id]);
+        return entry.value != null;
+    },
+    set: async (event: NostrEvent) => {
+        const result = await kv.set([event.id], event);
+        if (!result.ok) {
+            console.error(`failed to set`, event);
+        }
+        return eventStore;
+    },
+    filter: async function* (filter: NostrFilters) {
+        for await (const entry of kv.list<NostrEvent>({ prefix: [] })) {
+            const event = entry.value;
+            if (isMatched(event, filter)) {
+                yield event;
+            }
+        }
+    },
+    all: async function* () {
+        for await (const entry of kv.list<NostrEvent>({ prefix: [] })) {
+            const event = entry.value;
+            yield event;
+        }
+    },
+};
+
+const deps = {
+    eventStore,
+    admin: PublicKey.FromBech32("npub1dww6jgxykmkt7tqjqx985tg58dxlm7v83sa743578xa4j7zpe3hql6pdnf") as PublicKey,
+};
