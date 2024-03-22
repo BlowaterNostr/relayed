@@ -16,8 +16,8 @@ import { Handler } from "$fresh/server.ts";
 import { kv } from "./index.tsx";
 
 export const handler: Handler = (req: Request) => {
-    return ws_handler(req)
-}
+    return ws_handler(req);
+};
 
 const connections = new Map<WebSocket, Map<string, NostrFilters>>();
 Deno.addSignalListener("SIGINT", () => {
@@ -28,34 +28,30 @@ Deno.addSignalListener("SIGINT", () => {
 });
 
 export const ws_handler = (req: Request) => {
+    if (req.headers.get("upgrade") != "websocket") {
+        return new Response(null, { status: 501 });
+    }
 
+    const { socket, response } = Deno.upgradeWebSocket(req);
 
-        if (req.headers.get("upgrade") != "websocket") {
-            return new Response(null, { status: 501 });
-        }
+    socket.onopen = ((socket: WebSocket) => (e) => {
+        console.log("a client connected!");
+        connections.set(socket, new Map());
+    })(socket);
 
-        const { socket, response } = Deno.upgradeWebSocket(req);
+    socket.onclose = ((socket: WebSocket) => (e) => {
+        connections.delete(socket);
+    })(socket);
 
-        socket.onopen = ((socket: WebSocket) => (e) => {
-            console.log("a client connected!");
-            connections.set(socket, new Map());
-        })(socket);
+    socket.onmessage = onMessage({
+        ...deps,
+        this_socket: socket,
+        connections,
+        event_db: deps.eventStore,
+    });
 
-        socket.onclose = ((socket: WebSocket) => (e) => {
-            connections.delete(socket);
-        })(socket);
-
-        socket.onmessage = onMessage({
-            ...deps,
-            this_socket: socket,
-            connections,
-            event_db: deps.eventStore,
-        });
-
-        return response;
-
-}
-
+    return response;
+};
 
 export interface EventDatabase {
     has(id: string): Promise<boolean> | boolean;
@@ -64,7 +60,9 @@ export interface EventDatabase {
     all(): AsyncIterable<NostrEvent>;
 }
 
-type func_FilterPolicy = (filter: NostrFilters) => { type: "reject"; reason: string } | { type: true };
+type func_FilterPolicy = (
+    filter: NostrFilters,
+) => { type: "reject"; reason: string } | { type: true };
 
 function onMessage(deps: {
     this_socket: WebSocket;
@@ -111,7 +109,10 @@ function onMessage(deps: {
             if (deps.filterPolicy) {
                 const ok = deps.filterPolicy(filter);
                 if (ok.type == "reject") {
-                    send(deps.this_socket, JSON.stringify(respond_notice(ok.reason)));
+                    send(
+                        deps.this_socket,
+                        JSON.stringify(respond_notice(ok.reason)),
+                    );
                     return;
                 }
             }
@@ -128,9 +129,8 @@ function onMessage(deps: {
                 send(matched.socket, res);
             }
             send(this_socket, JSON.stringify(respond_eose(sub_id)));
-        // deno-lint-ignore no-empty
+            // deno-lint-ignore no-empty
         } else if (cmd == "CLOSE") {
-
         } else {
             console.log("not implemented", event.data);
         }
@@ -213,7 +213,9 @@ export function isMatched(event: NostrEvent, filter: NostrFilters) {
     const es = filter["#e"] || [];
 
     const match_kind = kinds.length == 0 ? true : kinds.includes(event.kind);
-    const match_author = authors.length == 0 ? true : authors.includes(event.pubkey);
+    const match_author = authors.length == 0
+        ? true
+        : authors.includes(event.pubkey);
     const match_id = ids.length == 0 ? true : ids.includes(event.id);
     const match_p_tag = ps.length == 0 ? true : ps.includes(event.pubkey);
     const match_e_tag = es.length == 0 ? true : es.includes(event.id);
@@ -268,5 +270,7 @@ const eventStore: EventDatabase = {
 
 const deps = {
     eventStore,
-    admin: PublicKey.FromBech32("npub1dww6jgxykmkt7tqjqx985tg58dxlm7v83sa743578xa4j7zpe3hql6pdnf") as PublicKey,
+    admin: PublicKey.FromBech32(
+        "npub1dww6jgxykmkt7tqjqx985tg58dxlm7v83sa743578xa4j7zpe3hql6pdnf",
+    ) as PublicKey,
 };
