@@ -1,0 +1,7 @@
+type Query {
+    events: Events
+}
+
+type Events {
+    count: Int
+}

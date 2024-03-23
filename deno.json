@@ -7,14 +7,16 @@
         "start": "deno run -A --unstable --watch=static/,routes/ dev.ts",
         "build": "deno run -A --unstable  dev.ts build",
         "preview": "deno run -A --unstable  main.ts",
-        "update": "deno run -A -r https://fresh.deno.dev/update ."
+        "update": "deno run -A -r https://fresh.deno.dev/update .",
+        "nano": "deno run --allow-net --watch nano.tsx"
     },
     "lint": {
         "rules": {
             "tags": [
                 "fresh",
                 "recommended"
-            ]
+            ],
+            "exclude": ["require-await"]
         }
     },
     "exclude": [
