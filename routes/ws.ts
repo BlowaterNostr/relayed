@@ -164,7 +164,7 @@ async function* matchAllEventsWithSubcriptions(
     events: EventDatabase,
     connections: Map<WebSocket, Map<string, NostrFilters>>,
 ) {
-    const all_events = [];
+    const all_events = [] as NostrEvent[];
     for await (const event of events.all()) {
         all_events.push(event);
     }

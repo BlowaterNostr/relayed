@@ -8,7 +8,7 @@
         "build": "deno run -A --unstable  dev.ts build",
         "preview": "deno run -A --unstable  main.ts",
         "update": "deno run -A -r https://fresh.deno.dev/update .",
-        "nano": "deno run --allow-net --watch nano.tsx"
+        "graphql": "deno run --allow-net --allow-env --watch --unstable nano.tsx"
     },
     "lint": {
         "rules": {
@@ -16,7 +16,7 @@
                 "fresh",
                 "recommended"
             ],
-            "exclude": ["require-await"]
+            "exclude": ["require-await", "require-yield"]
         }
     },
     "exclude": [
@@ -38,7 +38,8 @@
         "jsxImportSource": "preact",
         "lib": [
             "deno.unstable"
-        ]
+        ],
+        "noImplicitAny": false
     },
     "nodeModulesDir": true,
     "fmt": {
