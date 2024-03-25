@@ -1,20 +1,14 @@
 {
-    "lock": false,
     "tasks": {
-        "check": "deno fmt --check && deno lint && deno check **/*.ts && deno check **/*.tsx",
-        "cli": "echo \"import '\\$fresh/src/dev/cli.ts'\" | deno run --unstable -A -",
-        "manifest": "deno task cli manifest $(pwd)",
-        "start": "deno run -A --unstable --watch=static/,routes/ dev.ts",
-        "build": "deno run -A --unstable  dev.ts build",
-        "preview": "deno run -A --unstable  main.ts",
-        "update": "deno run -A -r https://fresh.deno.dev/update ."
+        "run": "deno run --allow-net --allow-env --watch --unstable main.tsx"
     },
     "lint": {
         "rules": {
             "tags": [
                 "fresh",
                 "recommended"
-            ]
+            ],
+            "exclude": ["require-await", "require-yield", "no-unused-vars"]
         }
     },
     "exclude": [
@@ -36,7 +30,8 @@
         "jsxImportSource": "preact",
         "lib": [
             "deno.unstable"
-        ]
+        ],
+        "noImplicitAny": false
     },
     "nodeModulesDir": true,
     "fmt": {

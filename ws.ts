@@ -1,5 +1,3 @@
-// deno-lint-ignore-file no-unused-vars
-/// <reference lib="deno.unstable" />
 import { PublicKey } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/key.ts";
 import {
     _RelayResponse_EOSE,
@@ -11,13 +9,8 @@ import {
     NostrFilters,
     verifyEvent,
 } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/nostr.ts";
-
-import { Handler } from "$fresh/server.ts";
-import { kv } from "./index.tsx";
-
-export const handler: Handler = (req: Request) => {
-    return ws_handler(req);
-};
+import { kv } from "./main.tsx";
+import { PolicyResolver } from "./resolvers/policy.ts";
 
 const connections = new Map<WebSocket, Map<string, NostrFilters>>();
 Deno.addSignalListener("SIGINT", () => {
@@ -89,6 +82,40 @@ function onMessage(deps: {
                     JSON.stringify(respond_ok(event, false, "invalid event")),
                 );
             }
+
+            { // check if allowed to write
+                const policy = await PolicyResolver(event.kind);
+                const author = PublicKey.FromHex(event.pubkey) as PublicKey;
+                if (policy.write) {
+                    console.log(policy, policy.block.has(author.bech32()));
+                    if (policy.block.has(author.bech32())) {
+                        return send(
+                            this_socket,
+                            JSON.stringify(
+                                respond_ok(
+                                    event,
+                                    false,
+                                    "this pubkey is blocked",
+                                ),
+                            ),
+                        );
+                    }
+                } else {
+                    if (!policy.allow.has(author.bech32())) {
+                        return send(
+                            this_socket,
+                            JSON.stringify(
+                                respond_ok(
+                                    event,
+                                    false,
+                                    "this kind is blocked",
+                                ),
+                            ),
+                        );
+                    }
+                }
+            }
+
             console.log(nostr_ws_msg);
             await event_db.set(event);
             send(this_socket, JSON.stringify(respond_ok(event, true, "")));
@@ -123,10 +150,13 @@ function onMessage(deps: {
                     connections,
                 )
             ) {
-                const res = JSON.stringify(
-                    respond_event(matched.sub_id, matched.event),
-                );
-                send(matched.socket, res);
+                const policy = await PolicyResolver(matched.event.kind);
+                if(policy.read) {
+                    const res = JSON.stringify(
+                        respond_event(matched.sub_id, matched.event),
+                    );
+                    send(matched.socket, res);
+                }
             }
             send(this_socket, JSON.stringify(respond_eose(sub_id)));
             // deno-lint-ignore no-empty
@@ -164,7 +194,7 @@ async function* matchAllEventsWithSubcriptions(
     events: EventDatabase,
     connections: Map<WebSocket, Map<string, NostrFilters>>,
 ) {
-    const all_events = [];
+    const all_events = [] as NostrEvent[];
     for await (const event of events.all()) {
         all_events.push(event);
     }
@@ -242,18 +272,18 @@ function send(socket: WebSocket, data: string) {
 
 const eventStore: EventDatabase = {
     has: async (id: string) => {
-        const entry = await kv.get<NostrEvent>([id]);
+        const entry = await kv.get<NostrEvent>(["event", id]);
         return entry.value != null;
     },
     set: async (event: NostrEvent) => {
-        const result = await kv.set([event.id], event);
+        const result = await kv.set(["event", event.id], event);
         if (!result.ok) {
             console.error(`failed to set`, event);
         }
         return eventStore;
     },
     filter: async function* (filter: NostrFilters) {
-        for await (const entry of kv.list<NostrEvent>({ prefix: [] })) {
+        for await (const entry of kv.list<NostrEvent>({ prefix: ["event"] })) {
             const event = entry.value;
             if (isMatched(event, filter)) {
                 yield event;
@@ -261,7 +291,7 @@ const eventStore: EventDatabase = {
         }
     },
     all: async function* () {
-        for await (const entry of kv.list<NostrEvent>({ prefix: [] })) {
+        for await (const entry of kv.list<NostrEvent>({ prefix: ["event"] })) {
             const event = entry.value;
             yield event;
         }
