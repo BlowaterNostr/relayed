@@ -4,6 +4,7 @@ import {
 } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/nostr.ts";
 import { kv } from "../main.tsx";
 import { PublicKey } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/key.ts";
+import { pubkey_resolver } from "./pubkey.ts";
 
 export async function getEventByID(
     _,
@@ -30,27 +31,25 @@ export class EventResolver {
     }
 
     pubkey = () => {
-        const pubkey = PublicKey.FromHex(this.event.pubkey) as PublicKey;
-        return {
-            ...pubkey,
-            bech32: pubkey.bech32,
-            profile: async () => {
-                await kv.get(["event", NostrKind.META_DATA, this.event.pubkey]);
-                console.log("get profile");
-                return "213"; // get profile from DB
-            },
-        };
+        return pubkey_resolver(PublicKey.FromHex(this.event.pubkey) as PublicKey)
     };
 }
 
-export async function EventsResolver(_, args: { pubkey: string }) {
-    console.log(arguments);
+type Pagination = {
+    offset?: number | undefined
+    limit?: number | undefined
+}
+
+export async function EventsResolver(_, args: { pubkey: string | undefined} & Pagination ) {
+    const limit = args.limit || 10
     const list = kv.list<NostrEvent>({ prefix: ["event"] });
     const res = [] as EventResolver[];
     for await (const entry of list) {
-        console.log(entry.value);
-        if (args.pubkey == entry.value.pubkey) {
+        if (args.pubkey == undefined || args.pubkey == entry.value.pubkey) {
             res.push(new EventResolver(entry.value));
+            if(res.length >= limit) {
+                break
+            }
         }
     }
     return {
