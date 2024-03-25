@@ -1,7 +1,6 @@
 {
-    "lock": false,
     "tasks": {
-        "graphql": "deno run --allow-net --allow-env --watch --unstable nano.tsx"
+        "run": "deno run --allow-net --allow-env --watch --unstable main.tsx"
     },
     "lint": {
         "rules": {

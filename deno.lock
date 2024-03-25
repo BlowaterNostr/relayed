@@ -1,0 +1,156 @@
+{
+  "version": "3",
+  "packages": {
+    "specifiers": {
+      "npm:@graphql-tools/schema@10.0.0": "npm:@graphql-tools/schema@10.0.0_graphql@16.6.0",
+      "npm:graphql-http@1.22.0": "npm:graphql-http@1.22.0_graphql@16.6.0",
+      "npm:graphql@16.6.0": "npm:graphql@16.6.0",
+      "npm:graphql@16.8.1": "npm:graphql@16.8.1"
+    },
+    "npm": {
+      "@graphql-tools/merge@9.0.3_graphql@16.6.0": {
+        "integrity": "sha512-FeKv9lKLMwqDu0pQjPpF59GY3HReUkWXKsMIuMuJQOKh9BETu7zPEFUELvcw8w+lwZkl4ileJsHXC9+AnsT2Lw==",
+        "dependencies": {
+          "@graphql-tools/utils": "@graphql-tools/utils@10.1.2_graphql@16.6.0",
+          "graphql": "graphql@16.6.0",
+          "tslib": "tslib@2.6.2"
+        }
+      },
+      "@graphql-tools/schema@10.0.0_graphql@16.6.0": {
+        "integrity": "sha512-kf3qOXMFcMs2f/S8Y3A8fm/2w+GaHAkfr3Gnhh2LOug/JgpY/ywgFVxO3jOeSpSEdoYcDKLcXVjMigNbY4AdQg==",
+        "dependencies": {
+          "@graphql-tools/merge": "@graphql-tools/merge@9.0.3_graphql@16.6.0",
+          "@graphql-tools/utils": "@graphql-tools/utils@10.1.2_graphql@16.6.0",
+          "graphql": "graphql@16.6.0",
+          "tslib": "tslib@2.6.2",
+          "value-or-promise": "value-or-promise@1.0.12"
+        }
+      },
+      "@graphql-tools/utils@10.1.2_graphql@16.6.0": {
+        "integrity": "sha512-fX13CYsDnX4yifIyNdiN0cVygz/muvkreWWem6BBw130+ODbRRgfiVveL0NizCEnKXkpvdeTy9Bxvo9LIKlhrw==",
+        "dependencies": {
+          "@graphql-typed-document-node/core": "@graphql-typed-document-node/core@3.2.0_graphql@16.6.0",
+          "cross-inspect": "cross-inspect@1.0.0",
+          "dset": "dset@3.1.3",
+          "graphql": "graphql@16.6.0",
+          "tslib": "tslib@2.6.2"
+        }
+      },
+      "@graphql-typed-document-node/core@3.2.0_graphql@16.6.0": {
+        "integrity": "sha512-mB9oAsNCm9aM3/SOv4YtBMqZbYj10R7dkq8byBqxGY/ncFwhf2oQzMV+LCRlWoDSEBJ3COiR1yeDvMtsoOsuFQ==",
+        "dependencies": {
+          "graphql": "graphql@16.6.0"
+        }
+      },
+      "cross-inspect@1.0.0": {
+        "integrity": "sha512-4PFfn4b5ZN6FMNGSZlyb7wUhuN8wvj8t/VQHZdM4JsDcruGJ8L2kf9zao98QIrBPFCpdk27qst/AGTl7pL3ypQ==",
+        "dependencies": {
+          "tslib": "tslib@2.6.2"
+        }
+      },
+      "dset@3.1.3": {
+        "integrity": "sha512-20TuZZHCEZ2O71q9/+8BwKwZ0QtD9D8ObhrihJPr+vLLYlSuAU3/zL4cSlgbfeoGHTjCSJBa7NGcrF9/Bx/WJQ==",
+        "dependencies": {}
+      },
+      "graphql-http@1.22.0_graphql@16.6.0": {
+        "integrity": "sha512-9RBUlGJWBFqz9LwfpmAbjJL/8j/HCNkZwPBU5+Bfmwez+1Ay43DocMNQYpIWsWqH0Ftv6PTNAh2aRnnMCBJgLw==",
+        "dependencies": {
+          "graphql": "graphql@16.6.0"
+        }
+      },
+      "graphql@16.6.0": {
+        "integrity": "sha512-KPIBPDlW7NxrbT/eh4qPXz5FiFdL5UbaA0XUNz2Rp3Z3hqBSkbj0GVjwFDztsWVauZUWsbKHgMg++sk8UX0bkw==",
+        "dependencies": {}
+      },
+      "graphql@16.8.1": {
+        "integrity": "sha512-59LZHPdGZVh695Ud9lRzPBVTtlX9ZCV150Er2W43ro37wVof0ctenSaskPPjN7lVTIN8mSZt8PHUNKZuNQUuxw==",
+        "dependencies": {}
+      },
+      "tslib@2.6.2": {
+        "integrity": "sha512-AEYxH93jGFPn/a2iVAwW87VuUIkR1FVUKB77NwMF7nBTDkDrrT/Hpt/IrCJ0QXhW27jTBDcf5ZY7w6RiqTMw2Q==",
+        "dependencies": {}
+      },
+      "value-or-promise@1.0.12": {
+        "integrity": "sha512-Z6Uz+TYwEqE7ZN50gwn+1LCVo9ZVrpxRPOhOLnncYkY1ZzOYtrX8Fwf/rFktZ8R5mJms6EZf5TqNOMeZmnPq9Q==",
+        "dependencies": {}
+      }
+    }
+  },
+  "redirects": {
+    "https://esm.sh/xss": "https://esm.sh/xss@1.0.15"
+  },
+  "remote": {
+    "https://deno.land/std@0.202.0/encoding/hex.ts": "b4e346619c0535a5db48d6bdb6e057c8d1179c64a2b0ba8d3b0b8a79ae361a90",
+    "https://deno.land/std@0.210.0/http/_negotiation/common.ts": "14d1a52427ab258a4b7161cd80e1d8a207b7cc64b46e911780f57ead5f4323c6",
+    "https://deno.land/std@0.210.0/http/_negotiation/encoding.ts": "ff747d107277c88cb7a6a62a08eeb8d56dad91564cbcccb30694d5dc126dcc53",
+    "https://deno.land/std@0.210.0/http/_negotiation/language.ts": "7bcddd8db3330bdb7ce4fc00a213c5547c1968139864201efd67ef2d0d51887d",
+    "https://deno.land/std@0.210.0/http/_negotiation/media_type.ts": "58847517cd549384ad677c0fe89e0a4815be36fe7a303ea63cee5f6a1d7e1692",
+    "https://deno.land/std@0.210.0/http/negotiation.ts": "46e74a6bad4b857333a58dc5b50fe8e5a4d5267e97292293ea65f980bd918086",
+    "https://deno.land/std@0.210.0/http/status.ts": "a1b712248767f486c7403b7c06ac2bf0dd2d42abdc4253aa858433464aa62ca9",
+    "https://deno.land/x/gql@1.2.4/common.ts": "f3c917a79b03525a4eeec6b1f852800aa081e44c8f1d6c97a3eddfe0edb32e27",
+    "https://deno.land/x/gql@1.2.4/deps.ts": "a7771a930b25712fe094c08df24cef6eaf291bd3c1ead2a26f4b54e982b031cf",
+    "https://deno.land/x/gql@1.2.4/graphiql/markup.ts": "825b76ac088b3813c85da2061e4b4e59ae5f57e38761f66e8c941bbd65999afa",
+    "https://deno.land/x/gql@1.2.4/graphiql/render.ts": "ec1127f6cdabe95be6db4870b1b00dab28f2223fd42886e58d83fc94d087449b",
+    "https://deno.land/x/gql@1.2.4/http.ts": "2420a89d7571cdcbfa7c6b2aa5f8fa46d726cddaaaa24e4250f526860b66aa7b",
+    "https://deno.land/x/gql@1.2.4/mod.ts": "87d0cf3562bd142c52ff402f4db9c1b0672a54c4bf7f90e57f0bdc8114b6c684",
+    "https://deno.land/x/gql@2.0.1/deps.ts": "c543fdfbb9c76b80246b8f159cb22608a1865b7b245c5a94f423c3f38cc3af61",
+    "https://deno.land/x/gql@2.0.1/graphiql/markup.ts": "825b76ac088b3813c85da2061e4b4e59ae5f57e38761f66e8c941bbd65999afa",
+    "https://deno.land/x/gql@2.0.1/graphiql/render.ts": "09211e8513ca75263ba4c5fed9aec1e5891ce9feea3f4b22c2a1c9491edf852f",
+    "https://deno.land/x/gql@2.0.1/mod.ts": "f50ed7ed131e27ca0daba23bf2fac1d47ba435a4a9da9dea491ad30666dddc5b",
+    "https://deno.land/x/gql@2.0.1/types.ts": "c9b933567b747ce041f6f0d3e9bba32d102af62ae17785fa0b97310407af8481",
+    "https://deno.land/x/graphql_tag@0.1.2/deps.ts": "5696461c8bb42db7c83486db452e125f7cfdc62a2c628bb470a4447d934b90b3",
+    "https://deno.land/x/graphql_tag@0.1.2/mod.ts": "57fd56de5f7cbc66e23ce896cc8e99521d286e89969d83e09d960642b0a9d652",
+    "https://esm.sh/@noble/ciphers@0.4.1/chacha": "7a4f831bac30d9ea271916ba892de547c30e0b93bf1034a412a7d443c222fdf5",
+    "https://esm.sh/@noble/ciphers@0.4.1/utils": "dab4bff2315f22a8ac409ddd30c2650ca581fcb050efbf9f01d59e1a377083b1",
+    "https://esm.sh/@noble/curves@1.3.0/secp256k1": "5252f1cfd6e12be71ea2826f76d171458040f168424e59d97a30cc5f54032460",
+    "https://esm.sh/@noble/hashes@1.3.3/hkdf": "111a33b0d87213d1b5a7ebf613b0ecd91fc16e3633855862e9a29cf1b87eaee6",
+    "https://esm.sh/@noble/hashes@1.3.3/hmac": "6ff87e80b0bc2bf0720932f0ffb73e780f744faa76b9d62004de8f9469ad1004",
+    "https://esm.sh/@noble/hashes@1.3.3/sha256": "79b93b1d9fc09ebc107b43f6ac5ff39afda60c12dffd673786cb75c756f712fc",
+    "https://esm.sh/@noble/hashes@1.3.3/utils": "cf42cac8548d0c87096c52c693dde2e1ed080e64989ede7ec527b50538236a53",
+    "https://esm.sh/@scure/base@1.1.5": "916e253b1ed0201505202a27209f22d7500f114a303aecd1b76ebcc757df06e6",
+    "https://esm.sh/graphql@16.6.0/language/parser#=": "38b1158134aed40573b9885cc5f3b020fe8b60c75aa8b32420388c577615b97a",
+    "https://esm.sh/graphql@16.8.1": "50c951dc0b67f3f01e70d1511ca68ebb067ef99d3590d6a7afb36819c84595f9",
+    "https://esm.sh/preact-render-to-string@6.4.1": "a9ca466e5daf03595e041d96829c74f8e493f928e35a64b56365d952fda04ec3",
+    "https://esm.sh/preact@10.19.6/jsx-runtime": "f4c9e5f72ef18435eab846ae02e315a63da724f64fb08d806d2ddeaf08d99bd8",
+    "https://esm.sh/stable/preact@10.19.6/denonext/jsx-runtime.js": "97e9eeb40443de53a8cb3b70f264d04db2bbfc5c2298fdb15d1c471283ccd6aa",
+    "https://esm.sh/stable/preact@10.19.6/denonext/preact.mjs": "68491395d287895f4d697e403ded5b0ebb8fed0494f9e870c422bc017e5e52f5",
+    "https://esm.sh/stable/preact@10.20.0/denonext/preact.mjs": "323ac0dab4ede066d3ef67ae2f51029ed1bd5f81f5a07982924a00aee3c54ada",
+    "https://esm.sh/v135/@noble/ciphers@0.4.1/denonext/_poly1305.js": "74fe8431e8dcf918852eb4e6e04a4471bb5ed078669a2400257fdac4393daee3",
+    "https://esm.sh/v135/@noble/ciphers@0.4.1/denonext/chacha.js": "764a5855210c5043eaa349b0a6c31ad510a0fecc6bc60cfe13f25898d7ebf12d",
+    "https://esm.sh/v135/@noble/ciphers@0.4.1/denonext/utils.js": "46b2c364654930a968e5800cb86d1d467288a2af90d65b251a2d864ff88c66c1",
+    "https://esm.sh/v135/@noble/curves@1.3.0/denonext/_shortw_utils.js": "8d690a8fbb0100093f6ab96457c634465eb4bd79f07adb30bbda5234d189c5e8",
+    "https://esm.sh/v135/@noble/curves@1.3.0/denonext/abstract/curve.js": "280130b0d3e1f15037b449b5870e1f39f5db99f8c310f85a9d4ab129d6dfa583",
+    "https://esm.sh/v135/@noble/curves@1.3.0/denonext/abstract/hash-to-curve.js": "591fb0f81529b2dc9f7ea61a0b988ab659564688ce33bd6c95b0e55c698cb338",
+    "https://esm.sh/v135/@noble/curves@1.3.0/denonext/abstract/modular.js": "f6a63a4725fe208141f87a773ba9485813ffd5291129656fd073f832fbcd4437",
+    "https://esm.sh/v135/@noble/curves@1.3.0/denonext/abstract/utils.js": "0ff50d14245befb0ee4b0eae5f0292acc5fd0f6e5f385195654d7825f0a75669",
+    "https://esm.sh/v135/@noble/curves@1.3.0/denonext/abstract/weierstrass.js": "f97e7a6ecf9f23a864538f7089645c17103f3809134c0bb99c29d56ce824e7b4",
+    "https://esm.sh/v135/@noble/curves@1.3.0/denonext/secp256k1.js": "641ad16ddf79c7f4b69cba4d266078ef21f446cfc3fec83120f6de4f6dee84aa",
+    "https://esm.sh/v135/@noble/hashes@1.3.3/denonext/_assert.js": "f8882bd96e2a6d1834a445c5af97f927b1ba028f34963c8570568e33385c4419",
+    "https://esm.sh/v135/@noble/hashes@1.3.3/denonext/_sha2.js": "7b27807ccd3cf7c3b90ce23b17bc9c5d791a72e41dd2e01a4debd9727990bca9",
+    "https://esm.sh/v135/@noble/hashes@1.3.3/denonext/crypto.js": "cf6efbafcbb35e03bcb3a36cccd3d6d1f9bc4ba23f44a79551929a28c83e7901",
+    "https://esm.sh/v135/@noble/hashes@1.3.3/denonext/hkdf.js": "8266c059351887f60542a555bd9441ccdabf0882256b99ce010b0bf55ca389dd",
+    "https://esm.sh/v135/@noble/hashes@1.3.3/denonext/hmac.js": "c7a0a4fa8e369846713459398dfa1dc373ae5e6fa0eb7280f33dfd3f55a5c8fc",
+    "https://esm.sh/v135/@noble/hashes@1.3.3/denonext/sha256.js": "762e0b0cbde1990fc905eb816d30cdc0cf7dd4c23d123408c6963294f124f97d",
+    "https://esm.sh/v135/@noble/hashes@1.3.3/denonext/utils.js": "701831e12a7e656df467b62f929ac9536ababef1b9b7445c7f87512366ae3933",
+    "https://esm.sh/v135/@scure/base@1.1.5/denonext/base.mjs": "442a66c701330f27adff8b2fa6067308ff9a82b8e178c8482882ff4aa7dfee82",
+    "https://esm.sh/v135/cssfilter@0.0.10/denonext/cssfilter.mjs": "b2dec5f4b51c7574509f04305aa54e33f9de336d66eade79f05552312f18f40b",
+    "https://esm.sh/v135/graphql@16.6.0/denonext/language/parser.js": "82063e5ee234089909652e04ccd9f0e1c0670c04ac6db896099a638ae759b182",
+    "https://esm.sh/v135/graphql@16.8.1/denonext/graphql.mjs": "585b84022623b931e27a7a8134cd24ec50b33ea12fd18b43254527628a0fddac",
+    "https://esm.sh/v135/preact-render-to-string@6.4.1/denonext/preact-render-to-string.mjs": "0226110b9ae616d3143c7ea00b822faa1cdd96588188fc3f28e2bf8ead94ba4f",
+    "https://esm.sh/v135/xss@1.0.14/denonext/xss.mjs": "14816f7618a48f2141c7ca320bdf60ef284f4015dfa3a8f7fd15c65c922f556d",
+    "https://esm.sh/v135/xss@1.0.15/denonext/xss.mjs": "b8f597b39cbfc8b9f9b0d73b5b8bb46ee08dd7a9b7eadccb1b524ea54617b031",
+    "https://esm.sh/xss@1.0.14": "8102ceb8c90a3acaa2e7611559aa5a3ff41554f2cc3b06122739a9589c78f8ff",
+    "https://esm.sh/xss@1.0.15": "0d8e27aed5ce31e760e17b57bbc6f95a0146751387a2be56d5263297d92ac387",
+    "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/key.ts": "b9e8a1e5a446168ad93372adc299101d2be2760bd4a18c2853a8a267aa5f3f54",
+    "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/nip4.ts": "8681f8180b285a37c6d1c0eba34fd02e2347cd82f84267924ac1abf9e31bca1d",
+    "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/nip44.ts": "80b06b2612e40482815e322007c650568e20e2b66f548379b4ff3af63b00235f",
+    "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/nostr.ts": "e366fa1405319b8db309c162ed1f0851a523fa33846a99f1ad2f063a04ee90a9",
+    "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/scure.js": "fbc4be16918272bd167fff1184a7f5bbd1a676bad2a73130bb530d78df893a99",
+    "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/vendor/secp256k1.js": "69e32f6c686cc651ff2e6d4d22ed6e9b6f86b38311b405b47b2abdf3cb98eb4d"
+  },
+  "workspace": {
+    "dependencies": [
+      "npm:tailwindcss@3.4.1"
+    ]
+  }
+}

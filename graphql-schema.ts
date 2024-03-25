@@ -8,10 +8,11 @@ export const typeDefs = gql`
   }
 
   type Mutation {
-    add_block(kind: Int, pubkey: String, ): Policy
-    remove_block(kind: Int, pubkey: String, ): Policy
-    add_allow(kind: Int, pubkey: String, ): Policy
-    remove_allow(kind: Int, pubkey: String, ): Policy
+    add_block(kind: Int, pubkey: String, ): Policy!
+    remove_block(kind: Int, pubkey: String, ): Policy!
+    add_allow(kind: Int, pubkey: String, ): Policy!
+    remove_allow(kind: Int, pubkey: String, ): Policy!
+    set_policy(kind: Int, read: Boolean, write: Boolean): Policy!
   }
 
   type Events {
@@ -29,7 +30,7 @@ export const typeDefs = gql`
   }
   type PublicKey {
     hex: String!
-    profile: String
+    bech32: String!
   }
   type Policy {
     kind: Int!
