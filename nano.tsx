@@ -1,55 +1,11 @@
 import { GraphQLHTTP } from "https://deno.land/x/gql@1.2.4/mod.ts";
-import { makeExecutableSchema } from "https://esm.sh/graphql-tools@9.0.1";
+import { makeExecutableSchema } from "npm:@graphql-tools/schema@10.0.0";
 import { gql } from "https://deno.land/x/graphql_tag@0.1.2/mod.ts";
-import { NostrEvent } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/nostr.ts";
-import { PublicKey } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/key.ts";
-
-const typeDefs = gql`
-  type Query {
-    hello: String
-    events(pubkey: String): Events
-    policies: [Policy]
-  }
-  type Mutation {
-    block(kind: Int, pubkey: String, ): Policy
-  }
-  type Events {
-    count: Int!
-    data: [Event]
-  }
-  type Event {
-    id: String
-    content: String
-    pubkey: String
-    kind: Int
-    created_at: Int
-    sig: String
-    tags: [Tag]
-  }
-  enum Tag = P_Tag | E_Tag
-  type P_Tag {
-    name: string! # p
-    value: string!
-  }
-  type E_Tag {
-    name: string! # p
-    value: string!
-    relay: string
-    kind: string
-  }
-  type Policy {
-    kind: Int
-    read: Boolean
-    write: Boolean
-    allow: [PublicKey]
-    block: [PublicKey]
-  }
-  type PublicKey {
-    hex: String
-    bech32: String
-    events: [Event]
-  }
-`;
+import {
+    NostrEvent,
+    NostrKind,
+} from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/nostr.ts";
+import { typeDefs } from "./schema.ts";
 
 const schema = makeExecutableSchema({ resolvers: resolvers(), typeDefs });
 
@@ -78,17 +34,29 @@ function resolvers() {
             policies: Policies,
         },
         Mutation: {
-            block: async (_, args: { kind: number; pubkey: string }) => {
-                await kv.set(["policy", args.kind], {
-                    block: [args.pubkey],
-                });
-                const pub = PublicKey.FromString(args.pubkey) as PublicKey;
-                return {
-                    kind: args.kind,
-                    read: true,
-                    write: false,
-                    block: [pub],
-                };
+            add_block: async (_, args: { kind: number; pubkey: string }) => {
+                const policy = await PolicyResolver(args.kind);
+                policy.block.add(args.pubkey);
+                await kv.set(["policy", args.kind], policy);
+                return policy;
+            },
+            remove_block: async (_, args: { kind: number; pubkey: string }) => {
+                const policy = await PolicyResolver(args.kind);
+                policy.block.delete(args.pubkey);
+                await kv.set(["policy", args.kind], policy);
+                return policy;
+            },
+            add_allow: async (_, args: { kind: number; pubkey: string }) => {
+                const policy = await PolicyResolver(args.kind);
+                policy.allow.add(args.pubkey);
+                await kv.set(["policy", args.kind], policy);
+                return policy;
+            },
+            remove_allow: async (_, args: { kind: number; pubkey: string }) => {
+                const policy = await PolicyResolver(args.kind);
+                policy.allow.delete(args.pubkey);
+                await kv.set(["policy", args.kind], policy);
+                return policy;
             },
         },
     };
@@ -121,3 +89,50 @@ export async function Policies() {
     }
     return res;
 }
+
+async function PolicyResolver(kind: NostrKind): Promise<Policy> {
+    const entry = await kv.get<Policy>(["policy", kind]);
+    if (entry.value == null) {
+        return {
+            kind: kind,
+            read: true,
+            write: true,
+            allow: new Set(),
+            block: new Set(),
+        };
+    }
+    const policy = entry.value;
+    console.log(policy);
+
+    const allow = new Set<string>();
+    for (const item of policy.allow) {
+        if (typeof item == "string") {
+            allow.add(item);
+        }
+    }
+    policy.allow = allow;
+
+    const block = new Set<string>();
+    for (const item of policy.block) {
+        if (typeof item == "string") {
+            block.add(item);
+        }
+    }
+    policy.block = block;
+    policy.kind = kind;
+    if (policy.read == null) {
+        policy.read = true;
+    }
+    if (policy.write == null) {
+        policy.write = true;
+    }
+    return policy;
+}
+
+type Policy = {
+    kind: NostrKind;
+    read: boolean;
+    write: boolean;
+    allow: Set<string>;
+    block: Set<string>;
+};
