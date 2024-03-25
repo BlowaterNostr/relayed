@@ -242,18 +242,19 @@ function send(socket: WebSocket, data: string) {
 
 const eventStore: EventDatabase = {
     has: async (id: string) => {
-        const entry = await kv.get<NostrEvent>([id]);
+        const entry = await kv.get<NostrEvent>(["event", id]);
         return entry.value != null;
     },
     set: async (event: NostrEvent) => {
-        const result = await kv.set([event.id], event);
+        console.log("set", event);
+        const result = await kv.set(["event", event.id], event);
         if (!result.ok) {
             console.error(`failed to set`, event);
         }
         return eventStore;
     },
     filter: async function* (filter: NostrFilters) {
-        for await (const entry of kv.list<NostrEvent>({ prefix: [] })) {
+        for await (const entry of kv.list<NostrEvent>({ prefix: ["event"] })) {
             const event = entry.value;
             if (isMatched(event, filter)) {
                 yield event;
@@ -261,7 +262,7 @@ const eventStore: EventDatabase = {
         }
     },
     all: async function* () {
-        for await (const entry of kv.list<NostrEvent>({ prefix: [] })) {
+        for await (const entry of kv.list<NostrEvent>({ prefix: ["event"] })) {
             const event = entry.value;
             yield event;
         }

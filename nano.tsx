@@ -6,6 +6,8 @@ import {
     NostrKind,
 } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/nostr.ts";
 import { typeDefs } from "./schema.ts";
+import { ws_handler } from "./ws.ts";
+import { EventResolver, getEventByID } from "./t.ts";
 
 const schema = makeExecutableSchema({ resolvers: resolvers(), typeDefs });
 
@@ -16,21 +18,25 @@ Deno.serve({
     },
 }, async (req) => {
     const { pathname } = new URL(req.url);
-    return pathname === "/api"
-        ? await GraphQLHTTP<Request>({
+    if (pathname == "/api") {
+        return GraphQLHTTP<Request>({
             schema,
             graphiql: true,
-        })(req)
-        : new Response("Not Found", { status: 404 });
+        })(req);
+    }
+    if (pathname == "/") {
+        return ws_handler(req);
+    }
+    return new Response("Not Found", { status: 404 });
 });
 
-const kv = await Deno.openKv();
+export const kv = await Deno.openKv();
 
 function resolvers() {
     return {
         Query: {
-            hello: () => `Hello World!`,
             events: EventsResolver,
+            event: getEventByID,
             policies: Policies,
         },
         Mutation: {
@@ -64,12 +70,12 @@ function resolvers() {
 
 async function EventsResolver(_, args: { pubkey: string }) {
     console.log(arguments);
-    const list = kv.list<NostrEvent>({ prefix: [] });
-    const res = [] as NostrEvent[];
+    const list = kv.list<NostrEvent>({ prefix: ["event"] });
+    const res = [] as EventResolver[];
     for await (const entry of list) {
         console.log(entry.value);
         if (args.pubkey == entry.value.pubkey) {
-            res.push(entry.value);
+            res.push(new EventResolver(entry.value));
         }
     }
     return {

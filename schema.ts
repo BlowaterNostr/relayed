@@ -2,8 +2,8 @@ import { gql } from "https://deno.land/x/graphql_tag@0.1.2/mod.ts";
 
 export const typeDefs = gql`
   type Query {
-    hello: String
     events(pubkey: String): Events
+    event(id: String): Event
     policies: [Policy]
   }
 
@@ -19,13 +19,17 @@ export const typeDefs = gql`
     data: [Event]
   }
   type Event {
-    id: String
-    content: String
-    pubkey: String
-    kind: Int
-    created_at: Int
-    sig: String
-    tags: [String]
+    id: String!
+    content: String!
+    pubkey: PublicKey!
+    kind: Int!
+    created_at: Int!
+    sig: String!
+    tags: [String!]!
+  }
+  type PublicKey {
+    hex: String!
+    profile: String
   }
   type Policy {
     kind: Int!
