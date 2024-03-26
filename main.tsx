@@ -16,8 +16,8 @@ const schema = gql.buildSchema(gql.print(typeDefs));
 
 export function run(args: {
     port: number;
-    admin: PublicKey
-    password: string
+    admin: PublicKey;
+    password: string;
 }) {
     const connections = new Map<WebSocket, Map<string, NostrFilters>>();
     Deno.addSignalListener("SIGINT", () => {
@@ -27,7 +27,7 @@ export function run(args: {
         Deno.exit();
     });
 
-    const { port } = args;
+    const { port, password } = args;
     Deno.serve({
         port,
         onListen({ hostname, port }) {
@@ -36,32 +36,7 @@ export function run(args: {
     }, async (req) => {
         const { pathname } = new URL(req.url);
         if (pathname == "/api") {
-            if (req.method == "POST") {
-                const query = await req.json();
-                const nip42 = req.headers.get("nip42");
-                console.log(nip42);
-                if (nip42) {
-                    const auth_event = parseJSON<NostrEvent>(nip42);
-                    if (auth_event instanceof Error) {
-                        return new Response(`{errors:["no auth"]}`);
-                    }
-                    const ok = await verifyEvent(auth_event);
-                    if (!ok) {
-                        return new Response(`{"errors":["no auth"]}`);
-                    }
-                }
-                const result = await gql.graphql({
-                    schema: schema,
-                    source: query.query,
-                    variableValues: query.variables,
-                    rootValue: RootResolver(),
-                });
-                console.log(result);
-                return new Response(JSON.stringify(result));
-            }
-            const res = new Response(graphiql);
-            res.headers.set("content-type", "html");
-            return res;
+            return graphql_handler(password)(req);
         }
         if (pathname == "/") {
             return ws_handler(connections)(req);
@@ -70,6 +45,44 @@ export function run(args: {
         resp.headers.set("content-type", "html");
         return resp;
     });
+}
+
+const graphql_handler = (password: string) => async (req: Request) => {
+    if (req.method == "POST") {
+        const query = await req.json();
+        const nip42 = req.headers.get("nip42");
+        console.log("nip42 header", nip42);
+
+        const pw = req.headers.get("password");
+        if(pw != password) {
+            return new Response(`{"errors":"incorrect password"}`)
+        }
+
+        if (nip42) {
+            const auth_event = parseJSON<NostrEvent>(nip42);
+            if (auth_event instanceof Error) {
+                return new Response(`{errors:["no auth"]}`);
+            }
+            const ok = await verifyEvent(auth_event);
+            if (!ok) {
+                return new Response(`{"errors":["no auth"]}`);
+            }
+        }
+        const result = await gql.graphql({
+            schema: schema,
+            source: query.query,
+            variableValues: query.variables,
+            rootValue: RootResolver(),
+        });
+        console.log(result);
+        return new Response(JSON.stringify(result));
+    } else if (req.method == "GET") {
+        const res = new Response(graphiql);
+        res.headers.set("content-type", "html");
+        return res;
+    } else {
+        return new Response(undefined, { status: 405 });
+    }
 }
 
 export type RelayInformation = {
