@@ -77,6 +77,7 @@
     }
   },
   "redirects": {
+    "https://esm.sh/graphql": "https://esm.sh/graphql@16.8.1",
     "https://esm.sh/xss": "https://esm.sh/xss@1.0.15"
   },
   "remote": {
@@ -141,6 +142,7 @@
     "https://esm.sh/v135/xss@1.0.15/denonext/xss.mjs": "b8f597b39cbfc8b9f9b0d73b5b8bb46ee08dd7a9b7eadccb1b524ea54617b031",
     "https://esm.sh/xss@1.0.14": "8102ceb8c90a3acaa2e7611559aa5a3ff41554f2cc3b06122739a9589c78f8ff",
     "https://esm.sh/xss@1.0.15": "0d8e27aed5ce31e760e17b57bbc6f95a0146751387a2be56d5263297d92ac387",
+    "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/_helper.ts": "461fae1c0ffb7bd35ff254d93dabfe29beae2fdd4b68ce43b3ebc1679de52fa8",
     "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/key.ts": "b9e8a1e5a446168ad93372adc299101d2be2760bd4a18c2853a8a267aa5f3f54",
     "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/nip4.ts": "8681f8180b285a37c6d1c0eba34fd02e2347cd82f84267924ac1abf9e31bca1d",
     "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/nip44.ts": "80b06b2612e40482815e322007c650568e20e2b66f548379b4ff3af63b00235f",

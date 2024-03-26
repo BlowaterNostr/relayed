@@ -1,37 +1,76 @@
-import { GraphQLHTTP } from "https://deno.land/x/gql@1.2.4/mod.ts";
-import { makeExecutableSchema } from "npm:@graphql-tools/schema@10.0.0";
 import { typeDefs } from "./graphql-schema.ts";
 import { ws_handler } from "./ws.ts";
 import Error404 from "./routes/_404.tsx";
 import { render } from "https://esm.sh/preact-render-to-string@6.4.1";
 import { RootResolver } from "./resolvers/root.ts";
+import * as gql from "https://esm.sh/graphql@16.8.1";
+import {
+    NostrEvent,
+    NostrFilters,
+    verifyEvent,
+} from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/nostr.ts";
+import { parseJSON } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/_helper.ts";
+import { PublicKey } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/key.ts";
 
-const schema = makeExecutableSchema({ resolvers: RootResolver(), typeDefs });
+const schema = gql.buildSchema(gql.print(typeDefs));
 
-Deno.serve({
-    port: 8000,
-    onListen({ hostname, port }) {
-        console.log(`☁  Started on http://${hostname}:${port}`);
-    },
-}, async (req) => {
-    const { pathname } = new URL(req.url);
-    if (pathname == "/api") {
-        if(req.method == "POST") {
-            return GraphQLHTTP({
-                schema
-            })(req)
+export function run(args: {
+    port: number;
+    admin: PublicKey
+    password: string
+}) {
+    const connections = new Map<WebSocket, Map<string, NostrFilters>>();
+    Deno.addSignalListener("SIGINT", () => {
+        for (const socket of connections.keys()) {
+            socket.close();
         }
-        const res = new Response(graphiql)
-        res.headers.set("content-type", "html")
-        return res
-    }
-    if (pathname == "/") {
-        return ws_handler(req);
-    }
-    const resp = new Response(render(Error404()), { status: 404 });
-    resp.headers.set("content-type", "html");
-    return resp;
-});
+        Deno.exit();
+    });
+
+    const { port } = args;
+    Deno.serve({
+        port,
+        onListen({ hostname, port }) {
+            console.log(`☁  Started on http://${hostname}:${port}`);
+        },
+    }, async (req) => {
+        const { pathname } = new URL(req.url);
+        if (pathname == "/api") {
+            if (req.method == "POST") {
+                const query = await req.json();
+                const nip42 = req.headers.get("nip42");
+                console.log(nip42);
+                if (nip42) {
+                    const auth_event = parseJSON<NostrEvent>(nip42);
+                    if (auth_event instanceof Error) {
+                        return new Response(`{errors:["no auth"]}`);
+                    }
+                    const ok = await verifyEvent(auth_event);
+                    if (!ok) {
+                        return new Response(`{"errors":["no auth"]}`);
+                    }
+                }
+                const result = await gql.graphql({
+                    schema: schema,
+                    source: query.query,
+                    variableValues: query.variables,
+                    rootValue: RootResolver(),
+                });
+                console.log(result);
+                return new Response(JSON.stringify(result));
+            }
+            const res = new Response(graphiql);
+            res.headers.set("content-type", "html");
+            return res;
+        }
+        if (pathname == "/") {
+            return ws_handler(connections)(req);
+        }
+        const resp = new Response(render(Error404()), { status: 404 });
+        resp.headers.set("content-type", "html");
+        return resp;
+    });
+}
 
 export type RelayInformation = {
     name?: string;
@@ -45,7 +84,6 @@ export type RelayInformation = {
 };
 
 export const kv = await Deno.openKv();
-
 
 const graphiql = `
 <!--
@@ -127,4 +165,4 @@ const graphiql = `
       );
     </script>
   </body>
-</html>`
+</html>`;

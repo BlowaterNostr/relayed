@@ -1,6 +1,6 @@
 {
     "tasks": {
-        "run": "deno run --allow-net --allow-env --watch --unstable main.tsx"
+        "run": "deno run --allow-net --allow-env --unstable deploy/default.ts"
     },
     "lint": {
         "rules": {

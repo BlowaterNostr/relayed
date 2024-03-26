@@ -10,3 +10,4 @@ _fresh/
 # npm dependencies
 node_modules/
 .DS_Store
+deploy/default.ts

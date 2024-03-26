@@ -8,7 +8,6 @@ export async function Policies() {
     const list = kv.list<NostrEvent>({ prefix: ["policy"] });
     const res = [] as NostrEvent[];
     for await (const entry of list) {
-        console.log(entry.value);
         res.push(entry.value);
     }
     return res;
@@ -26,7 +25,6 @@ export async function PolicyResolver(kind: NostrKind): Promise<Policy> {
         };
     }
     const policy = entry.value;
-    console.log(policy);
 
     const allow = new Set<string>();
     for (const item of policy.allow) {

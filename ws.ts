@@ -12,39 +12,31 @@ import {
 import { kv } from "./main.tsx";
 import { PolicyResolver } from "./resolvers/policy.ts";
 
-const connections = new Map<WebSocket, Map<string, NostrFilters>>();
-Deno.addSignalListener("SIGINT", () => {
-    for (const socket of connections.keys()) {
-        socket.close();
-    }
-    Deno.exit();
-});
+export const ws_handler =
+    (connections: Map<WebSocket, Map<string, NostrFilters>>) =>
+    (req: Request) => {
+        if (req.headers.get("upgrade") != "websocket") {
+            return new Response(null, { status: 501 });
+        }
 
-export const ws_handler = (req: Request) => {
-    if (req.headers.get("upgrade") != "websocket") {
-        return new Response(null, { status: 501 });
-    }
+        const { socket, response } = Deno.upgradeWebSocket(req);
 
-    const { socket, response } = Deno.upgradeWebSocket(req);
+        socket.onopen = ((socket: WebSocket) => (e) => {
+            console.log("a client connected!");
+            connections.set(socket, new Map());
+        })(socket);
 
-    socket.onopen = ((socket: WebSocket) => (e) => {
-        console.log("a client connected!");
-        connections.set(socket, new Map());
-    })(socket);
+        socket.onclose = ((socket: WebSocket) => (e) => {
+            connections.delete(socket);
+        })(socket);
 
-    socket.onclose = ((socket: WebSocket) => (e) => {
-        connections.delete(socket);
-    })(socket);
+        socket.onmessage = onMessage({
+            this_socket: socket,
+            connections,
+        });
 
-    socket.onmessage = onMessage({
-        ...deps,
-        this_socket: socket,
-        connections,
-        event_db: deps.eventStore,
-    });
-
-    return response;
-};
+        return response;
+    };
 
 export interface EventDatabase {
     has(id: string): Promise<boolean> | boolean;
@@ -60,10 +52,9 @@ type func_FilterPolicy = (
 function onMessage(deps: {
     this_socket: WebSocket;
     connections: Map<WebSocket, Map<string, NostrFilters>>;
-    event_db: EventDatabase;
     filterPolicy?: func_FilterPolicy;
 }) {
-    const { event_db, this_socket, connections } = deps;
+    const { this_socket, connections } = deps;
 
     return async (event: MessageEvent<string>) => {
         console.log(event.data);
@@ -71,7 +62,7 @@ function onMessage(deps: {
         const cmd = nostr_ws_msg[0];
         if (cmd == "EVENT") {
             const id = nostr_ws_msg[1].id;
-            if (await event_db.has(id)) {
+            if (await eventStore.has(id)) {
                 return;
             }
             const event = nostr_ws_msg[1];
@@ -87,7 +78,6 @@ function onMessage(deps: {
                 const policy = await PolicyResolver(event.kind);
                 const author = PublicKey.FromHex(event.pubkey) as PublicKey;
                 if (policy.write) {
-                    console.log(policy, policy.block.has(author.bech32()));
                     if (policy.block.has(author.bech32())) {
                         return send(
                             this_socket,
@@ -116,8 +106,7 @@ function onMessage(deps: {
                 }
             }
 
-            console.log(nostr_ws_msg);
-            await event_db.set(event);
+            await eventStore.set(event);
             send(this_socket, JSON.stringify(respond_ok(event, true, "")));
             for (
                 const matched of matchEventWithSubscriptions(
@@ -146,12 +135,12 @@ function onMessage(deps: {
             connections.get(this_socket)?.set(sub_id, filter);
             for await (
                 const matched of matchAllEventsWithSubcriptions(
-                    event_db,
+                    eventStore,
                     connections,
                 )
             ) {
                 const policy = await PolicyResolver(matched.event.kind);
-                if(policy.read) {
+                if (policy.read) {
                     const res = JSON.stringify(
                         respond_event(matched.sub_id, matched.event),
                     );
@@ -296,11 +285,4 @@ const eventStore: EventDatabase = {
             yield event;
         }
     },
-};
-
-const deps = {
-    eventStore,
-    admin: PublicKey.FromBech32(
-        "npub1dww6jgxykmkt7tqjqx985tg58dxlm7v83sa743578xa4j7zpe3hql6pdnf",
-    ) as PublicKey,
 };

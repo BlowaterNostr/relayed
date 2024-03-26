@@ -23,7 +23,6 @@ export class EventResolver {
     kind: NostrKind;
     content: string;
     constructor(public event: NostrEvent) {
-        console.log("cons");
         this.id = this.event.id;
         this.sig = this.event.sig;
         this.kind = this.event.kind;
@@ -31,24 +30,28 @@ export class EventResolver {
     }
 
     pubkey = () => {
-        return pubkey_resolver(PublicKey.FromHex(this.event.pubkey) as PublicKey)
+        return pubkey_resolver(
+            PublicKey.FromHex(this.event.pubkey) as PublicKey,
+        );
     };
 }
 
 type Pagination = {
-    offset?: number | undefined
-    limit?: number | undefined
-}
+    offset?: number | undefined;
+    limit?: number | undefined;
+};
 
-export async function EventsResolver(_, args: { pubkey: string | undefined} & Pagination ) {
-    const limit = args.limit || 10
+export async function EventsResolver(
+    args: { pubkey: string | undefined } & Pagination,
+) {
+    const limit = args.limit || 10;
     const list = kv.list<NostrEvent>({ prefix: ["event"] });
     const res = [] as EventResolver[];
     for await (const entry of list) {
         if (args.pubkey == undefined || args.pubkey == entry.value.pubkey) {
             res.push(new EventResolver(entry.value));
-            if(res.length >= limit) {
-                break
+            if (res.length >= limit) {
+                break;
             }
         }
     }
