@@ -32,4 +32,4 @@ Relay url is `ws://localhost:8000`.
 
 ### Database
 
-If you use MacOS, maybe the dir is `~/Library/Caches/deno/location_data`
+If you are using MacOS, the directory might be `~/Library/Caches/deno/location_data`.
