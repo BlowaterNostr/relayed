@@ -1,16 +1,27 @@
-# Fresh project
+# Relayed
 
-Your new Fresh project is ready to go. You can follow the Fresh "Getting
-Started" guide here: https://fresh.deno.dev/docs/getting-started
+## Local Development
 
-### Usage
+To begin, install Deno by following the instructions at https://deno.land/manual/getting_started/installation.
 
-Make sure to install Deno: https://deno.land/manual/getting_started/installation
+Next, create a file named `deploy/default.ts`:
 
-Then start the project:
-
+```bash
+cp deploy/default.example.ts deploy/defalut.ts
 ```
+
+After that, launch the project with the command:
+
+```bash
 deno task start
 ```
 
-This will watch the project directory and restart as necessary.
+Finally, open your browser and go to `http://localhost:8000/api` to access the GraphQL playground.
+
+### Client Connection
+
+Relay url is `ws://localhost:8000`.
+
+### Database
+
+If you use MacOS, maybe the dir is `~/Library/Caches/deno/location_data`
