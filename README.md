@@ -18,6 +18,14 @@ deno task start
 
 Finally, open your browser and go to `http://localhost:8000/api` to access the GraphQL playground.
 
+### Use GraphQL Playground
+
+To begin, click the `Re-fetch GraphQL schema` button to retrieve the schema.
+
+In the Headers section, include `{"password":"123456"}` for identity verification.
+
+You can now utilize the GraphQL Playground to communicate with the server.
+
 ### Client Connection
 
 Relay url is `ws://localhost:8000`.
