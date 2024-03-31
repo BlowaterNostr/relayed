@@ -45,7 +45,7 @@ export async function run(args: {
     if (password == undefined) {
         password = Deno.env.get("relayed_pw");
         if (!password) {
-            return new Error("password is not set");
+            return new Error("password is not set, please set env var $relayed_pw");
         }
     }
     if (args.kv == undefined) {
