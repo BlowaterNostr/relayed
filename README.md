@@ -1,4 +1,13 @@
 # Relayed
+[![deno module](https://shield.deno.dev/x/relayed)](https://deno.land/x/relayed)
+
+> [!IMPORTANT]
+> Make Small Relay Great for the first time!
+
+Relayed is lightweight relay written in Deno.
+
+- built-in database
+- GraphQL API for relay management
 
 ## Quick Start
 
