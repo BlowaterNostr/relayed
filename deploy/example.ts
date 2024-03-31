@@ -7,6 +7,6 @@ const relay = await run({
     },
     password: Deno.env.get("relayed_pw"),
 });
-if(relay instanceof Error) {
-    console.error(relay)
+if (relay instanceof Error) {
+    console.error(relay);
 }

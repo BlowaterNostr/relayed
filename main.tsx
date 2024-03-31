@@ -63,7 +63,8 @@ export async function run(args: {
         {
             port,
             onListen: ({ hostname, port }) => {
-                console.log(`☁  Started on http://${hostname}:${port}`);
+                console.log(`☁  Relay server        started on   ws://${hostname}:${port}`);
+                console.log(`☁  Relay admin GraphQL started on http://${hostname}:${port}/api`);
                 resolve_hostname(hostname);
             },
         },
