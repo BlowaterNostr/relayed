@@ -8,66 +8,10 @@ export type Actor = {
     npub: string;
 };
 
-export const EventResolverFactory = (kv: Deno.Kv) =>
-    class EventResolver {
-        id: string;
-        sig: string;
-        kind: NostrKind;
-        content: string;
-
-        static Resolve(event: NostrEvent) {
-            // const policy = kv.get(["policy", event.kind])
-            return new EventResolver(event);
-        }
-
-        static async ByID(id: string) {
-            const entry = await kv.get<NostrEvent>(["event", id]);
-            if (entry.value) {
-                return new EventResolver(entry.value);
-            }
-            return null;
-        }
-
-        private constructor(public event: NostrEvent) {
-            this.id = this.event.id;
-            this.sig = this.event.sig;
-            this.kind = this.event.kind;
-            this.content = this.event.content;
-        }
-
-        pubkey = () => {
-            return pubkey_resolver(
-                PublicKey.FromHex(this.event.pubkey) as PublicKey,
-            );
-        };
-    };
-
 type Pagination = {
     offset?: number | undefined;
     limit?: number | undefined;
 };
-
-// export async function EventsResolver(
-//     args: { pubkey: string | undefined } & Pagination,
-// ) {
-//     const limit = args.limit || 10;
-//     const list = kv.list<NostrEvent>({ prefix: ["event"] });
-//     const res = [] as EventResolver[];
-//     for await (const entry of list) {
-//         if (args.pubkey == undefined || args.pubkey == entry.value.pubkey) {
-//             res.push(EventResolver.Resolve(entry.value));
-//             if (res.length >= limit) {
-//                 break;
-//             }
-//         }
-//     }
-//     return {
-//         count: res.length,
-//         data: async function x() {
-//             return res;
-//         },
-//     };
-// }
 
 export type func_GetEventsByIDs = (ids: string[]) => Promise<NostrEvent[]>;
 export const GetEventsByIDs = (kv: Deno.Kv): func_GetEventsByIDs => async (ids: string[]) => {

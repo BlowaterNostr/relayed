@@ -1,8 +1,8 @@
 # Relayed
+
 [![deno module](https://shield.deno.dev/x/relayed)](https://deno.land/x/relayed)
 
-> [!IMPORTANT]
-> Make Small Relay Great for the first time!
+> [!IMPORTANT] Make Small Relay Great for the first time!
 
 Relayed is lightweight relay written in Deno.
 
@@ -14,6 +14,7 @@ Relayed is lightweight relay written in Deno.
 1. Install Deno at https://deno.land/manual/getting_started/installation.
 
 2. Run following command in your CLI:
+
 ```bash
 # relayed_pw is the password for the relayed admin
 relayed_pw=123whatever deno run -r --allow-net --allow-env --unstable https://deno.land/x/relayed/deploy/example.ts

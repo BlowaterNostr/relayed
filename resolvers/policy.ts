@@ -1,5 +1,6 @@
 import { NostrEvent, NostrKind } from "../_libs.ts";
 import { DefaultPolicy } from "../main.tsx";
+import Dataloader from "https://esm.sh/dataloader@2.2.2";
 
 export const Policies = (kv: Deno.Kv) =>
     async function () {
@@ -10,6 +11,17 @@ export const Policies = (kv: Deno.Kv) =>
         }
         return res;
     };
+
+export const get_policies = (kv: Deno.Kv) => async (kinds: NostrKind[]) => {
+    const entries = await kv.getMany<Policy[]>(kinds.map((kind) => ["policy", kind]));
+    return entries.map((entry) => entry.value);
+};
+
+// export const get_policy_by_kind = (kv: Deno.Kv) => async (kind: NostrKind) => {
+//     const getter = get_policies(kv)
+//     const loader = new Dataloader<NostrKind, Policy | null>(kinds => getter(kinds))
+//     return loader.load(kind)
+// }
 
 export type func_ResolvePolicyByKind = (kind: NostrKind) => Promise<Policy>;
 export const PolicyResolver = (default_policy: DefaultPolicy, kv: Deno.Kv): func_ResolvePolicyByKind =>

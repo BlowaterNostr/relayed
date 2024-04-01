@@ -1,3 +1,4 @@
+// deno-lint-ignore-file
 import { typeDefs } from "./graphql-schema.ts";
 import { SubscriptionMap, ws_handler } from "./ws.ts";
 import Error404 from "./routes/_404.tsx";
@@ -5,7 +6,7 @@ import { render } from "https://esm.sh/preact-render-to-string@6.4.1";
 import { Mutation, RootResolver } from "./resolvers/root.ts";
 import * as gql from "https://esm.sh/graphql@16.8.1";
 
-import { Policy, PolicyResolver } from "./resolvers/policy.ts";
+import { get_policies, Policy, PolicyResolver } from "./resolvers/policy.ts";
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
 import { func_GetEventsByKinds, func_WriteEvent } from "./resolvers/event.ts";
 import { WriteEvent } from "./resolvers/event.ts";
@@ -13,6 +14,8 @@ import { func_GetEventsByIDs } from "./resolvers/event.ts";
 import { GetEventsByIDs } from "./resolvers/event.ts";
 import { GetEventsByKinds } from "./resolvers/event.ts";
 import { NostrEvent, NostrKind, parseJSON, PublicKey, verifyEvent } from "./_libs.ts";
+
+import Dataloader from "https://esm.sh/dataloader@2.2.2";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -59,6 +62,10 @@ export async function run(args: {
         resolve_hostname = resolve;
     });
 
+    const getter = get_policies(args.kv);
+    // @ts-ignore
+    const loader = new Dataloader<NostrKind, Policy | null>((kinds) => getter(kinds));
+
     const server = Deno.serve(
         {
             port,
@@ -72,7 +79,29 @@ export async function run(args: {
             ...args,
             password,
             connections,
-            resolvePolicyByKind: PolicyResolver(default_policy, args.kv),
+            resolvePolicyByKind: async (kind: NostrKind) => {
+                const policy = await loader.load(kind);
+                if (policy == null) {
+                    let allow_this_kind: boolean;
+                    if (default_policy.allowed_kinds == "all") {
+                        allow_this_kind = true;
+                    } else if (default_policy.allowed_kinds == "none") {
+                        allow_this_kind = false;
+                    } else if (default_policy.allowed_kinds.includes(kind)) {
+                        allow_this_kind = true;
+                    } else {
+                        allow_this_kind = false;
+                    }
+                    return {
+                        kind: kind,
+                        read: allow_this_kind,
+                        write: allow_this_kind,
+                        allow: new Set(),
+                        block: new Set(),
+                    };
+                }
+                return policy;
+            },
             write_event: WriteEvent(args.kv),
             get_events_by_IDs: GetEventsByIDs(args.kv),
             get_events_by_kinds: GetEventsByKinds(args.kv),
