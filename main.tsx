@@ -14,6 +14,7 @@ import { GetEventsByIDs } from "./resolvers/event.ts";
 import { GetEventsByKinds } from "./resolvers/event.ts";
 import { NostrEvent, NostrKind, parseJSON, PublicKey, verifyEvent } from "./_libs.ts";
 import { PolicyStore } from "./resolvers/policy.ts";
+import { Policies } from "./resolvers/policy.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -60,7 +61,8 @@ export async function run(args: {
         resolve_hostname = resolve;
     });
 
-    const policyStore = new PolicyStore(default_policy, args.kv);
+    const get_all_policies = Policies(args.kv);
+    const policyStore = new PolicyStore(default_policy, args.kv, await get_all_policies());
     const server = Deno.serve(
         {
             port,
@@ -83,11 +85,6 @@ export async function run(args: {
         }),
     );
 
-    const mutation_resolver = Mutation({
-        ...args,
-        policyStore,
-        kv: args.kv,
-    });
     return {
         server,
         url: `ws://${await hostname}:${port}`,

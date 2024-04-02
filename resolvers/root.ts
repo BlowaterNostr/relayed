@@ -10,25 +10,25 @@ export const Mutation = (args: {
         add_block: async (args: { kind: number; pubkey: string }) => {
             const policy = await policyStore.resolvePolicyByKind(args.kind);
             policy.block.add(args.pubkey);
-            await kv.set(["policy", args.kind], policy);
+            await policyStore.set_policy(policy);
             return policy;
         },
         remove_block: async (args: { kind: number; pubkey: string }) => {
             const policy = await policyStore.resolvePolicyByKind(args.kind);
             policy.block.delete(args.pubkey);
-            await kv.set(["policy", args.kind], policy);
+            await policyStore.set_policy(policy);
             return policy;
         },
         add_allow: async (args: { kind: number; pubkey: string }) => {
             const policy = await policyStore.resolvePolicyByKind(args.kind);
             policy.allow.add(args.pubkey);
-            await kv.set(["policy", args.kind], policy);
+            await policyStore.set_policy(policy);
             return policy;
         },
         remove_allow: async (args: { kind: number; pubkey: string }) => {
             const policy = await policyStore.resolvePolicyByKind(args.kind);
             policy.allow.delete(args.pubkey);
-            await kv.set(["policy", args.kind], policy);
+            await policyStore.set_policy(policy);
             return policy;
         },
         set_policy: policyStore.set_policy,
