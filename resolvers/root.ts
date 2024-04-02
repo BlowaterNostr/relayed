@@ -1,10 +1,7 @@
-import { NostrKind } from "../_libs.ts";
 import { PolicyStore } from "./policy.ts";
 import { Policies } from "./policy.ts";
-import { func_ResolvePolicyByKind } from "./policy.ts";
 
 export const Mutation = (args: {
-    // resolvePolicyByKind: func_ResolvePolicyByKind;
     policyStore: PolicyStore;
     kv: Deno.Kv;
 }) => {
@@ -34,23 +31,7 @@ export const Mutation = (args: {
             await kv.set(["policy", args.kind], policy);
             return policy;
         },
-        set_policy: async (
-            args: {
-                kind: NostrKind;
-                read?: boolean;
-                write?: boolean;
-            },
-        ) => {
-            const policy = await policyStore.resolvePolicyByKind(args.kind);
-            if (args.read != undefined) {
-                policy.read = args.read;
-            }
-            if (args.write != undefined) {
-                policy.write = args.write;
-            }
-            await kv.set(["policy", args.kind], policy);
-            return policy;
-        },
+        set_policy: policyStore.set_policy,
     };
 };
 
