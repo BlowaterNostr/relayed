@@ -195,8 +195,8 @@ async function handle_filter(args: {
     const event_candidates = new Map<string, NostrEvent>();
     const { filter, get_events_by_IDs, resolvePolicyByKind, get_events_by_kinds } = args;
     if (filter.ids) {
-        const events = await get_events_by_IDs(filter.ids);
-        for (const event of events) {
+        const events = get_events_by_IDs(new Set(filter.ids));
+        for await (const event of events) {
             const policy = await resolvePolicyByKind(event.kind);
             if (policy.read == false) {
                 continue;
@@ -215,7 +215,7 @@ async function handle_filter(args: {
                 event_candidates.delete(key);
             }
         } else {
-            const events = get_events_by_kinds(filter.kinds);
+            const events = get_events_by_kinds(new Set(filter.kinds));
             for await (const event of events) {
                 console.log(event);
                 event_candidates.set(event.id, event);

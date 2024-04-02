@@ -12,35 +12,15 @@ type Pagination = {
     limit?: number | undefined;
 };
 
-export type func_GetEventsByIDs = (ids: string[]) => Promise<NostrEvent[]>;
-export const GetEventsByIDs = (kv: Deno.Kv): func_GetEventsByIDs => async (ids: string[]) => {
-    const entries = await kv.getMany<NostrEvent[]>(ids.map((id) => ["event", id]));
-    return fromEntries(entries);
+export type func_GetEventsByIDs = (ids: Set<string>) => AsyncIterable<NostrEvent>;
+export type interface_GetEventsByIDs = {
+    get_events_by_IDs: func_GetEventsByIDs;
 };
 
-export type func_GetEventsByKinds = (kinds: NostrKind[]) => AsyncIterable<NostrEvent>;
-export const GetEventsByKinds = (kv: Deno.Kv): func_GetEventsByKinds =>
-    async function* x(kinds: NostrKind[]) {
-        for (const kind of kinds) {
-            const list = kv.list<NostrEvent>({ prefix: ["event", kind] });
-            for await (const entry of list) {
-                console.log(entry);
-                if (entry.value) {
-                    yield entry.value;
-                }
-            }
-        }
-    };
-
-function fromEntries<T>(entries: Deno.KvEntryMaybe<T>[]) {
-    const events: T[] = [];
-    for (const entry of entries) {
-        if (entry.value) {
-            events.push(entry.value);
-        }
-    }
-    return events;
-}
+export type func_GetEventsByKinds = (kinds: Set<NostrKind>) => AsyncIterable<NostrEvent>;
+export type interface_GetEventsByKinds = {
+    get_events_by_kinds: func_GetEventsByKinds;
+};
 
 export type func_GetEventsByAuthors = (authors: Set<string>) => AsyncIterable<NostrEvent>;
 export type interface_GetEventsByAuthors = {
@@ -52,7 +32,12 @@ export type interface_WriteEvent = {
     write_event: func_WriteEvent;
 };
 
-export class EventStore implements interface_GetEventsByAuthors, interface_WriteEvent {
+export class EventStore
+    implements
+        interface_GetEventsByAuthors,
+        interface_WriteEvent,
+        interface_GetEventsByIDs,
+        interface_GetEventsByKinds {
     private constructor(
         private events: Map<string, NostrEvent>,
         private kv: Deno.Kv,
@@ -71,6 +56,22 @@ export class EventStore implements interface_GetEventsByAuthors, interface_Write
     async *get_events_by_authors(authors: Set<string>): AsyncIterable<NostrEvent> {
         for (const event of this.events.values()) {
             if (authors.has(event.pubkey)) {
+                yield event;
+            }
+        }
+    }
+
+    async *get_events_by_IDs(ids: Set<string>) {
+        for (const event of this.events.values()) {
+            if (ids.has(event.id)) {
+                yield event;
+            }
+        }
+    }
+
+    async *get_events_by_kinds(kinds: Set<NostrKind>) {
+        for (const event of this.events.values()) {
+            if (kinds.has(event.kind)) {
                 yield event;
             }
         }

@@ -9,8 +9,6 @@ import { Policy } from "./resolvers/policy.ts";
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
 import { func_GetEventsByKinds, func_WriteEvent } from "./resolvers/event.ts";
 import { EventStore, func_GetEventsByIDs } from "./resolvers/event.ts";
-import { GetEventsByIDs } from "./resolvers/event.ts";
-import { GetEventsByKinds } from "./resolvers/event.ts";
 import { NostrEvent, NostrKind, parseJSON, PublicKey, verifyEvent } from "./_libs.ts";
 import { PolicyStore } from "./resolvers/policy.ts";
 import { Policies } from "./resolvers/policy.ts";
@@ -81,8 +79,8 @@ export async function run(args: {
             connections,
             resolvePolicyByKind: policyStore.resolvePolicyByKind,
             write_event: eventStore.write_event.bind(eventStore),
-            get_events_by_IDs: GetEventsByIDs(args.kv),
-            get_events_by_kinds: GetEventsByKinds(args.kv),
+            get_events_by_IDs: eventStore.get_events_by_IDs.bind(eventStore),
+            get_events_by_kinds: eventStore.get_events_by_kinds.bind(eventStore),
             get_events_by_authors: eventStore.get_events_by_authors.bind(eventStore),
             policyStore,
             kv: args.kv,
