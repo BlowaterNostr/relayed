@@ -1,33 +1,35 @@
 import { NostrKind } from "../_libs.ts";
+import { PolicyStore } from "./policy.ts";
 import { Policies } from "./policy.ts";
 import { func_ResolvePolicyByKind } from "./policy.ts";
 
 export const Mutation = (args: {
-    resolvePolicyByKind: func_ResolvePolicyByKind;
+    // resolvePolicyByKind: func_ResolvePolicyByKind;
+    policyStore: PolicyStore;
     kv: Deno.Kv;
 }) => {
-    const { resolvePolicyByKind, kv } = args;
+    const { policyStore, kv } = args;
     return {
         add_block: async (args: { kind: number; pubkey: string }) => {
-            const policy = await resolvePolicyByKind(args.kind);
+            const policy = await policyStore.resolvePolicyByKind(args.kind);
             policy.block.add(args.pubkey);
             await kv.set(["policy", args.kind], policy);
             return policy;
         },
         remove_block: async (args: { kind: number; pubkey: string }) => {
-            const policy = await resolvePolicyByKind(args.kind);
+            const policy = await policyStore.resolvePolicyByKind(args.kind);
             policy.block.delete(args.pubkey);
             await kv.set(["policy", args.kind], policy);
             return policy;
         },
         add_allow: async (args: { kind: number; pubkey: string }) => {
-            const policy = await resolvePolicyByKind(args.kind);
+            const policy = await policyStore.resolvePolicyByKind(args.kind);
             policy.allow.add(args.pubkey);
             await kv.set(["policy", args.kind], policy);
             return policy;
         },
         remove_allow: async (args: { kind: number; pubkey: string }) => {
-            const policy = await resolvePolicyByKind(args.kind);
+            const policy = await policyStore.resolvePolicyByKind(args.kind);
             policy.allow.delete(args.pubkey);
             await kv.set(["policy", args.kind], policy);
             return policy;
@@ -39,7 +41,7 @@ export const Mutation = (args: {
                 write?: boolean;
             },
         ) => {
-            const policy = await resolvePolicyByKind(args.kind);
+            const policy = await policyStore.resolvePolicyByKind(args.kind);
             if (args.read != undefined) {
                 policy.read = args.read;
             }
@@ -53,7 +55,7 @@ export const Mutation = (args: {
 };
 
 export function RootResolver(args: {
-    resolvePolicyByKind: func_ResolvePolicyByKind;
+    policyStore: PolicyStore;
     kv: Deno.Kv;
 }) {
     return {

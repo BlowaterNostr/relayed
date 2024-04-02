@@ -1,6 +1,5 @@
 import { NostrEvent, NostrKind } from "../_libs.ts";
 import { DefaultPolicy } from "../main.tsx";
-import Dataloader from "https://esm.sh/dataloader@2.2.2";
 
 export const Policies = (kv: Deno.Kv) =>
     async function () {
@@ -16,12 +15,6 @@ export const get_policies = (kv: Deno.Kv) => async (kinds: NostrKind[]) => {
     const entries = await kv.getMany<Policy[]>(kinds.map((kind) => ["policy", kind]));
     return entries.map((entry) => entry.value);
 };
-
-// export const get_policy_by_kind = (kv: Deno.Kv) => async (kind: NostrKind) => {
-//     const getter = get_policies(kv)
-//     const loader = new Dataloader<NostrKind, Policy | null>(kinds => getter(kinds))
-//     return loader.load(kind)
-// }
 
 export type func_ResolvePolicyByKind = (kind: NostrKind) => Promise<Policy>;
 export const PolicyResolver = (default_policy: DefaultPolicy, kv: Deno.Kv): func_ResolvePolicyByKind =>
@@ -80,3 +73,56 @@ export type Policy = {
     allow: Set<string>;
     block: Set<string>;
 };
+
+export class PolicyStore {
+    policies = new Map<NostrKind, Policy>();
+
+    constructor(
+        private default_policy: DefaultPolicy,
+        private kv: Deno.Kv,
+    ) {}
+
+    resolvePolicyByKind = async (kind: NostrKind): Promise<Policy> => {
+        const policy = this.policies.get(kind);
+        if (policy == undefined) {
+            const default_policy = this.default_policy;
+            let allow_this_kind: boolean;
+            if (default_policy.allowed_kinds == "all") {
+                allow_this_kind = true;
+            } else if (default_policy.allowed_kinds == "none") {
+                allow_this_kind = false;
+            } else if (default_policy.allowed_kinds.includes(kind)) {
+                allow_this_kind = true;
+            } else {
+                allow_this_kind = false;
+            }
+            return {
+                kind: kind,
+                read: allow_this_kind,
+                write: allow_this_kind,
+                allow: new Set(),
+                block: new Set(),
+            };
+        }
+        return policy;
+    };
+
+    set_policy = async (
+        args: {
+            kind: NostrKind;
+            read?: boolean;
+            write?: boolean;
+        },
+    ) => {
+        const policy = await this.resolvePolicyByKind(args.kind);
+        if (args.read != undefined) {
+            policy.read = args.read;
+        }
+        if (args.write != undefined) {
+            policy.write = args.write;
+        }
+        this.policies.set(args.kind, policy);
+        await this.kv.set(["policy", args.kind], policy);
+        return policy;
+    };
+}

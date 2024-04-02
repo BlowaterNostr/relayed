@@ -1,4 +1,3 @@
-// deno-lint-ignore-file
 import { typeDefs } from "./graphql-schema.ts";
 import { SubscriptionMap, ws_handler } from "./ws.ts";
 import Error404 from "./routes/_404.tsx";
@@ -6,7 +5,7 @@ import { render } from "https://esm.sh/preact-render-to-string@6.4.1";
 import { Mutation, RootResolver } from "./resolvers/root.ts";
 import * as gql from "https://esm.sh/graphql@16.8.1";
 
-import { get_policies, Policy, PolicyResolver } from "./resolvers/policy.ts";
+import { Policy } from "./resolvers/policy.ts";
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
 import { func_GetEventsByKinds, func_WriteEvent } from "./resolvers/event.ts";
 import { WriteEvent } from "./resolvers/event.ts";
@@ -14,8 +13,7 @@ import { func_GetEventsByIDs } from "./resolvers/event.ts";
 import { GetEventsByIDs } from "./resolvers/event.ts";
 import { GetEventsByKinds } from "./resolvers/event.ts";
 import { NostrEvent, NostrKind, parseJSON, PublicKey, verifyEvent } from "./_libs.ts";
-
-import Dataloader from "https://esm.sh/dataloader@2.2.2";
+import { PolicyStore } from "./resolvers/policy.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -62,10 +60,7 @@ export async function run(args: {
         resolve_hostname = resolve;
     });
 
-    const getter = get_policies(args.kv);
-    // @ts-ignore
-    const loader = new Dataloader<NostrKind, Policy | null>((kinds) => getter(kinds));
-
+    const policyStore = new PolicyStore(default_policy, args.kv);
     const server = Deno.serve(
         {
             port,
@@ -79,37 +74,20 @@ export async function run(args: {
             ...args,
             password,
             connections,
-            resolvePolicyByKind: async (kind: NostrKind) => {
-                const policy = await loader.load(kind);
-                if (policy == null) {
-                    let allow_this_kind: boolean;
-                    if (default_policy.allowed_kinds == "all") {
-                        allow_this_kind = true;
-                    } else if (default_policy.allowed_kinds == "none") {
-                        allow_this_kind = false;
-                    } else if (default_policy.allowed_kinds.includes(kind)) {
-                        allow_this_kind = true;
-                    } else {
-                        allow_this_kind = false;
-                    }
-                    return {
-                        kind: kind,
-                        read: allow_this_kind,
-                        write: allow_this_kind,
-                        allow: new Set(),
-                        block: new Set(),
-                    };
-                }
-                return policy;
-            },
+            resolvePolicyByKind: policyStore.resolvePolicyByKind,
             write_event: WriteEvent(args.kv),
             get_events_by_IDs: GetEventsByIDs(args.kv),
             get_events_by_kinds: GetEventsByKinds(args.kv),
+            policyStore,
             kv: args.kv,
         }),
     );
-    const resolvePolicyByKind = PolicyResolver(args.default_policy, args.kv);
-    const mutation_resolver = Mutation({ ...args, resolvePolicyByKind, kv: args.kv });
+
+    const mutation_resolver = Mutation({
+        ...args,
+        policyStore,
+        kv: args.kv,
+    });
     return {
         server,
         url: `ws://${await hostname}:${port}`,
@@ -117,10 +95,8 @@ export async function run(args: {
             await server.shutdown();
             args.kv?.close();
         },
-        set_policy: mutation_resolver.set_policy,
-        get_policy: (kind: NostrKind) => {
-            return resolvePolicyByKind(kind);
-        },
+        set_policy: policyStore.set_policy,
+        get_policy: policyStore.resolvePolicyByKind,
         default_policy: args.default_policy,
     };
 }
@@ -137,6 +113,7 @@ const root_handler = (
         connections: Map<WebSocket, SubscriptionMap>;
         default_policy: DefaultPolicy;
         resolvePolicyByKind: func_ResolvePolicyByKind;
+        policyStore: PolicyStore;
         kv: Deno.Kv;
     } & EventReadWriter,
 ) =>
@@ -156,9 +133,8 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
 };
 
 const graphql_handler =
-    (args: { password: string; kv: Deno.Kv; resolvePolicyByKind: func_ResolvePolicyByKind }) =>
-    async (req: Request) => {
-        const { password, kv, resolvePolicyByKind } = args;
+    (args: { password: string; kv: Deno.Kv; policyStore: PolicyStore }) => async (req: Request) => {
+        const { password, policyStore } = args;
         if (req.method == "POST") {
             const query = await req.json();
             const nip42 = req.headers.get("nip42");
