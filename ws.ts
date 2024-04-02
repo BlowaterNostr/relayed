@@ -1,7 +1,13 @@
 // deno-lint-ignore-file
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
 import { DefaultPolicy, EventReadWriter } from "./main.tsx";
-import { func_GetEventsByIDs, func_GetEventsByKinds, func_WriteEvent } from "./resolvers/event.ts";
+import {
+    func_GetEventsByAuthors,
+    func_GetEventsByFilter,
+    func_GetEventsByIDs,
+    func_GetEventsByKinds,
+    func_WriteEvent,
+} from "./resolvers/event.ts";
 import {
     _RelayResponse_EOSE,
     _RelayResponse_Event,
@@ -51,7 +57,23 @@ export const ws_handler = (
     return response;
 };
 
-export type SubscriptionMap = Map<string, NostrFilter[]>;
+export type SubscriptionMap = Map<string, Subscription>;
+export type Subscription = {
+    filter: NostrFilter;
+    eventSent: number;
+}[];
+
+function send_event_to_subscription(ws: WebSocket, event: NostrEvent, sub_id: string, filter: {
+    filter: NostrFilter;
+    eventSent: number;
+}) {
+    if ((filter.filter.limit && filter.eventSent < filter.filter.limit) || filter.filter.limit == undefined) {
+        ws.send(JSON.stringify(respond_event(sub_id, event)));
+        filter.eventSent++;
+        return true;
+    }
+    return false;
+}
 
 function onMessage(
     deps: {
@@ -148,10 +170,7 @@ async function handle_cmd_event(args: {
         if (policy.read === false) {
             return;
         }
-        send(
-            matched.socket,
-            JSON.stringify(respond_event(matched.sub_id, event)),
-        );
+        send_event_to_subscription(matched.socket, event, matched.sub_id, matched.filter);
     }
 }
 
@@ -167,7 +186,15 @@ async function handle_cmd_req(
     const sub_id = nostr_ws_msg[1];
     const filters = nostr_ws_msg.slice(2) as NostrFilter[];
 
-    args.connections.get(this_socket)?.set(sub_id, filters);
+    args.connections.get(this_socket)?.set(
+        sub_id,
+        filters.map((f) => {
+            return {
+                filter: f,
+                eventSent: 0,
+            };
+        }),
+    );
 
     // query this filter
     for (const filter of filters) {
@@ -184,13 +211,15 @@ async function handle_filter(args: {
     filter: NostrFilter;
     get_events_by_IDs: func_GetEventsByIDs;
     get_events_by_kinds: func_GetEventsByKinds;
+    get_events_by_authors: func_GetEventsByAuthors;
+    get_events_by_filter: func_GetEventsByFilter;
     resolvePolicyByKind: func_ResolvePolicyByKind;
 }) {
     const event_candidates = new Map<string, NostrEvent>();
     const { filter, get_events_by_IDs, resolvePolicyByKind, get_events_by_kinds } = args;
     if (filter.ids) {
-        const events = await get_events_by_IDs(filter.ids);
-        for (const event of events) {
+        const events = get_events_by_IDs(new Set(filter.ids));
+        for await (const event of events) {
             const policy = await resolvePolicyByKind(event.kind);
             if (policy.read == false) {
                 continue;
@@ -209,11 +238,27 @@ async function handle_filter(args: {
                 event_candidates.delete(key);
             }
         } else {
-            const events = args.get_events_by_kinds(filter.kinds);
+            const events = get_events_by_kinds(new Set(filter.kinds));
             for await (const event of events) {
                 console.log(event);
                 event_candidates.set(event.id, event);
             }
+        }
+    }
+    if (filter.authors) {
+        if (event_candidates.size > 0) {
+            console.log("event_candidates", event_candidates);
+        } else {
+            const events = args.get_events_by_authors(new Set(filter.authors));
+            for await (const event of events) {
+                console.log(event);
+                event_candidates.set(event.id, event);
+            }
+        }
+    }
+    if (filter.limit) {
+        for await (const event of args.get_events_by_filter(filter)) {
+            event_candidates.set(event.id, event);
         }
     }
     return event_candidates;
@@ -250,19 +295,22 @@ function* matchEventWithSubscriptions(
         console.log(subscriptions);
         for (const [sub_id, filters] of subscriptions) {
             console.log(sub_id, filters);
-            if (isMatched(event, filters)) {
+            const matched_filter = isMatched(event, filters);
+            if (matched_filter) {
                 yield {
                     socket,
                     sub_id,
                     event,
+                    filter: matched_filter,
                 };
             }
         }
     }
 }
 
-export function isMatched(event: NostrEvent, filters: NostrFilter[]) {
-    for (const filter of filters) {
+export function isMatched(event: NostrEvent, subscription: Subscription) {
+    for (const _filter of subscription) {
+        const filter = _filter.filter;
         const kinds = filter.kinds || [];
         const authors = filter.authors || [];
         const ids = filter.ids || [];
@@ -287,7 +335,7 @@ export function isMatched(event: NostrEvent, filters: NostrFilter[]) {
         // filter.until
 
         if (res) {
-            return res;
+            return _filter;
         }
     }
 }

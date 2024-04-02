@@ -9,7 +9,7 @@
                 "fresh",
                 "recommended"
             ],
-            "exclude": ["require-await", "require-yield", "no-unused-vars"]
+            "exclude": ["require-await", "require-yield", "no-unused-vars", "no-empty"]
         }
     },
     "exclude": [

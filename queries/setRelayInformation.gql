@@ -1,0 +1,18 @@
+mutation setRelayInformation($pubkey: String, $contact: String, $name: String, $description: String, $icon: String) {
+  set_relay_information(
+    pubkey: $pubkey
+    contact: $contact
+    name: $name
+    description: $description
+    icon: $icon
+  ) {
+    name
+    contact
+    description
+    icon
+    pubkey
+    software
+    supported_nips
+    version
+  }
+}
