@@ -1,7 +1,12 @@
 // deno-lint-ignore-file
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
 import { DefaultPolicy, EventReadWriter } from "./main.tsx";
-import { func_GetEventsByIDs, func_GetEventsByKinds, func_WriteEvent } from "./resolvers/event.ts";
+import {
+    func_GetEventsByAuthors,
+    func_GetEventsByIDs,
+    func_GetEventsByKinds,
+    func_WriteEvent,
+} from "./resolvers/event.ts";
 import {
     _RelayResponse_EOSE,
     _RelayResponse_Event,
@@ -184,6 +189,7 @@ async function handle_filter(args: {
     filter: NostrFilter;
     get_events_by_IDs: func_GetEventsByIDs;
     get_events_by_kinds: func_GetEventsByKinds;
+    get_events_by_authors: func_GetEventsByAuthors;
     resolvePolicyByKind: func_ResolvePolicyByKind;
 }) {
     const event_candidates = new Map<string, NostrEvent>();
@@ -209,7 +215,18 @@ async function handle_filter(args: {
                 event_candidates.delete(key);
             }
         } else {
-            const events = args.get_events_by_kinds(filter.kinds);
+            const events = get_events_by_kinds(filter.kinds);
+            for await (const event of events) {
+                console.log(event);
+                event_candidates.set(event.id, event);
+            }
+        }
+    }
+    if (filter.authors) {
+        if (event_candidates.size > 0) {
+            console.log("event_candidates", event_candidates);
+        } else {
+            const events = args.get_events_by_authors(new Set(filter.authors));
             for await (const event of events) {
                 console.log(event);
                 event_candidates.set(event.id, event);

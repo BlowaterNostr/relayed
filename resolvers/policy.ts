@@ -27,7 +27,7 @@ export class PolicyStore {
     constructor(
         private default_policy: DefaultPolicy,
         private kv: Deno.Kv,
-        private initial_policies: Policy[],
+        initial_policies: Policy[],
     ) {
         for (const policy of initial_policies) {
             this.policies.set(policy.kind, policy);

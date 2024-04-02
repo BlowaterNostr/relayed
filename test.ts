@@ -8,6 +8,7 @@ import {
     NostrKind,
     prepareNormalNostrEvent,
     RelayRejectedEvent,
+    RelayResponse_Event,
     SingleRelayConnection,
     SubscriptionStream,
 } from "./_libs.ts";
@@ -95,6 +96,19 @@ Deno.test("main", async () => {
 
         assertEquals(events.length, 3);
         // todo: assert content
+    }
+    {
+        const ctx1 = InMemoryAccountContext.Generate();
+        const event_1 = await randomEvent(ctx1, NostrKind.TEXT_NOTE, "1");
+
+        await client.sendEvent(event_1);
+
+        const stream = await client.newSub("get author", {
+            authors: [ctx1.publicKey.hex],
+        }) as SubscriptionStream;
+
+        const msg = await stream.chan.pop() as RelayResponse_Event;
+        assertEquals(msg.event, event_1);
     }
 
     await client.close();

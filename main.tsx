@@ -8,13 +8,13 @@ import * as gql from "https://esm.sh/graphql@16.8.1";
 import { Policy } from "./resolvers/policy.ts";
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
 import { func_GetEventsByKinds, func_WriteEvent } from "./resolvers/event.ts";
-import { WriteEvent } from "./resolvers/event.ts";
-import { func_GetEventsByIDs } from "./resolvers/event.ts";
+import { EventStore, func_GetEventsByIDs } from "./resolvers/event.ts";
 import { GetEventsByIDs } from "./resolvers/event.ts";
 import { GetEventsByKinds } from "./resolvers/event.ts";
 import { NostrEvent, NostrKind, parseJSON, PublicKey, verifyEvent } from "./_libs.ts";
 import { PolicyStore } from "./resolvers/policy.ts";
 import { Policies } from "./resolvers/policy.ts";
+import { interface_GetEventsByAuthors } from "./resolvers/event.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -63,6 +63,9 @@ export async function run(args: {
 
     const get_all_policies = Policies(args.kv);
     const policyStore = new PolicyStore(default_policy, args.kv, await get_all_policies());
+
+    const eventStore = await EventStore.New(args.kv);
+
     const server = Deno.serve(
         {
             port,
@@ -77,9 +80,10 @@ export async function run(args: {
             password,
             connections,
             resolvePolicyByKind: policyStore.resolvePolicyByKind,
-            write_event: WriteEvent(args.kv),
+            write_event: eventStore.write_event.bind(eventStore),
             get_events_by_IDs: GetEventsByIDs(args.kv),
             get_events_by_kinds: GetEventsByKinds(args.kv),
+            get_events_by_authors: eventStore.get_events_by_authors.bind(eventStore),
             policyStore,
             kv: args.kv,
         }),
@@ -102,7 +106,7 @@ export type EventReadWriter = {
     write_event: func_WriteEvent;
     get_events_by_IDs: func_GetEventsByIDs;
     get_events_by_kinds: func_GetEventsByKinds;
-};
+} & interface_GetEventsByAuthors;
 
 const root_handler = (
     args: {
