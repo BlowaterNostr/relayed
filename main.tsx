@@ -13,6 +13,7 @@ import { NostrEvent, NostrKind, parseJSON, PublicKey, verifyEvent } from "./_lib
 import { PolicyStore } from "./resolvers/policy.ts";
 import { Policies } from "./resolvers/policy.ts";
 import { interface_GetEventsByAuthors } from "./resolvers/event.ts";
+import Home from "./routes/home.tsx";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -37,6 +38,7 @@ export async function run(args: {
     port: number;
     admin?: PublicKey;
     password?: string;
+    information?: RelayInformation;
     default_policy: DefaultPolicy;
     kv?: Deno.Kv;
 }): Promise<Error | Relay> {
@@ -109,6 +111,7 @@ export type EventReadWriter = {
 const root_handler = (
     args: {
         password: string;
+        information?: RelayInformation;
         connections: Map<WebSocket, SubscriptionMap>;
         default_policy: DefaultPolicy;
         resolvePolicyByKind: func_ResolvePolicyByKind;
@@ -119,15 +122,36 @@ const root_handler = (
 async (req: Request, info: Deno.ServeHandlerInfo) => {
     console.log(info.remoteAddr);
 
-    const { pathname } = new URL(req.url);
+    const { pathname, protocol } = new URL(req.url);
     if (pathname == "/api") {
         return graphql_handler(args)(req);
     }
     if (pathname == "/") {
+        if (protocol == "http:" || protocol == "https:") {
+            if (req.headers.get("accept")?.includes("application/nostr+json")) {
+                return information_handler(args);
+            }
+            return home_handler(args);
+        }
         return ws_handler(args)(req, info);
     }
     const resp = new Response(render(Error404()), { status: 404 });
     resp.headers.set("content-type", "html");
+    return resp;
+};
+
+const home_handler = (args: { information?: RelayInformation }) => {
+    const resp = new Response(render(Home(args.information)), { status: 200 });
+    resp.headers.set("content-type", "html");
+    return resp
+}
+
+const information_handler = (args: { information?: RelayInformation }) => {
+    const resp = new Response(JSON.stringify(args.information), { status: 200 });
+    resp.headers.set("content-type", "application/json; charset=utf-8");
+    resp.headers.set("Access-Control-Allow-Origin", "*");
+    resp.headers.set("Access-Control-Allow-Methods", "GET");
+    resp.headers.set("Access-Control-Allow-Headers", "accept,content-type");
     return resp;
 };
 
