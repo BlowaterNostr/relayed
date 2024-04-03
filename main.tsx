@@ -13,7 +13,7 @@ import { NostrEvent, NostrKind, parseJSON, PublicKey, verifyEvent } from "./_lib
 import { PolicyStore } from "./resolvers/policy.ts";
 import { Policies } from "./resolvers/policy.ts";
 import { interface_GetEventsByAuthors } from "./resolvers/event.ts";
-import Home from "./routes/home.tsx";
+import Landing from "./routes/landing.tsx";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -128,35 +128,17 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
     }
     if (pathname == "/") {
         if (protocol == "http:" || protocol == "https:") {
+            if (req.headers.get("accept")?.includes("text/html")) {
+                return landing_handler(args);
+            }
             if (req.headers.get("accept")?.includes("application/nostr+json")) {
                 return information_handler(args);
-            }
-            if (req.headers.get("accept")?.includes("text/html")) {
-                return home_handler(args);
             }
         }
         return ws_handler(args)(req, info);
     }
     const resp = new Response(render(Error404()), { status: 404 });
     resp.headers.set("content-type", "html");
-    return resp;
-};
-
-const home_handler = (args: { information?: RelayInformation }) => {
-    const resp = new Response(render(Home(args.information)), { status: 200 });
-    resp.headers.set("content-type", "html");
-    return resp;
-};
-
-export const supported_nips = [1, 2];
-export const software = "https://github.com/BlowaterNostr/relayed";
-
-const information_handler = (args: { information?: RelayInformation }) => {
-    const resp = new Response(JSON.stringify({...args.information, supported_nips, software}), { status: 200 });
-    resp.headers.set("content-type", "application/json; charset=utf-8");
-    resp.headers.set("Access-Control-Allow-Origin", "*");
-    resp.headers.set("Access-Control-Allow-Methods", "GET");
-    resp.headers.set("Access-Control-Allow-Headers", "accept,content-type");
     return resp;
 };
 
@@ -209,6 +191,26 @@ export type RelayInformation = {
     software?: string;
     version?: string;
     icon?: string;
+};
+
+export const supported_nips = [1, 2];
+export const software = "https://github.com/BlowaterNostr/relayed";
+
+const landing_handler = (args: { information?: RelayInformation }) => {
+    const resp = new Response(render(Landing(args.information)), { status: 200 });
+    resp.headers.set("content-type", "html");
+    return resp;
+};
+
+const information_handler = (args: { information?: RelayInformation }) => {
+    const resp = new Response(JSON.stringify({ ...args.information, supported_nips, software }), {
+        status: 200,
+    });
+    resp.headers.set("content-type", "application/json; charset=utf-8");
+    resp.headers.set("Access-Control-Allow-Origin", "*");
+    resp.headers.set("Access-Control-Allow-Methods", "GET");
+    resp.headers.set("Access-Control-Allow-Headers", "accept,content-type");
+    return resp;
 };
 
 // export const kv = await Deno.openKv("./test-kv");

@@ -11,7 +11,7 @@ const relay = await run({
         description: "A lightweight relay written in Deno.",
         pubkey: "",
         contact: "",
-        icon: ""
+        icon: "",
     },
 });
 if (relay instanceof Error) {
