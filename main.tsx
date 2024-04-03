@@ -131,7 +131,9 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
             if (req.headers.get("accept")?.includes("application/nostr+json")) {
                 return information_handler(args);
             }
-            return home_handler(args);
+            if (req.headers.get("accept")?.includes("text/html")) {
+                return home_handler(args);
+            }
         }
         return ws_handler(args)(req, info);
     }
@@ -147,7 +149,7 @@ const home_handler = (args: { information?: RelayInformation }) => {
 }
 
 const information_handler = (args: { information?: RelayInformation }) => {
-    const resp = new Response(JSON.stringify(args.information), { status: 200 });
+    const resp = new Response(JSON.stringify(args.information || {}), { status: 200 });
     resp.headers.set("content-type", "application/json; charset=utf-8");
     resp.headers.set("Access-Control-Allow-Origin", "*");
     resp.headers.set("Access-Control-Allow-Methods", "GET");
