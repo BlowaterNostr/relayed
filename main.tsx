@@ -145,11 +145,14 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
 const home_handler = (args: { information?: RelayInformation }) => {
     const resp = new Response(render(Home(args.information)), { status: 200 });
     resp.headers.set("content-type", "html");
-    return resp
-}
+    return resp;
+};
+
+export const supported_nips = [1, 2];
+export const software = "https://github.com/BlowaterNostr/relayed";
 
 const information_handler = (args: { information?: RelayInformation }) => {
-    const resp = new Response(JSON.stringify(args.information || {}), { status: 200 });
+    const resp = new Response(JSON.stringify({...args.information, supported_nips, software}), { status: 200 });
     resp.headers.set("content-type", "application/json; charset=utf-8");
     resp.headers.set("Access-Control-Allow-Origin", "*");
     resp.headers.set("Access-Control-Allow-Methods", "GET");

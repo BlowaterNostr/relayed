@@ -9,8 +9,9 @@ const relay = await run({
     information: {
         name: "Relayed Example",
         description: "A lightweight relay written in Deno.",
-        supported_nips: [1],
-        software: "git+https://github.com/BlowaterNostr/relayed.git",
+        pubkey: "",
+        contact: "",
+        icon: ""
     },
 });
 if (relay instanceof Error) {
