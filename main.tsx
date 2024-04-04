@@ -1,6 +1,5 @@
 import { typeDefs } from "./graphql-schema.ts";
 import { SubscriptionMap, ws_handler } from "./ws.ts";
-import Error404 from "./routes/_404.tsx";
 import { render } from "https://esm.sh/preact-render-to-string@6.4.1";
 import { RootResolver } from "./resolvers/root.ts";
 import * as gql from "https://esm.sh/graphql@16.8.1";
@@ -14,6 +13,7 @@ import { PolicyStore } from "./resolvers/policy.ts";
 import { Policies } from "./resolvers/policy.ts";
 import { interface_GetEventsByAuthors } from "./resolvers/event.ts";
 import Landing from "./routes/landing.tsx";
+import Error404 from "./routes/_404.tsx";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
