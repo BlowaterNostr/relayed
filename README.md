@@ -52,6 +52,5 @@ You can now utilize the GraphQL Playground to communicate with the server.
 
 Relay url is `ws://localhost:8000`.
 
-### Database
-
-If you are using MacOS, the directory might be `~/Library/Caches/deno/location_data`.
+### Join our community 
+wss://relayed.deno.dev
