@@ -1,6 +1,7 @@
 // deno-lint-ignore-file no-empty
 import { Relay, run } from "./main.tsx";
 import { assertEquals } from "https://deno.land/std@0.202.0/assert/assert_equals.ts";
+import { assertIsError } from "https://deno.land/std@0.202.0/assert/mod.ts";
 import { fail } from "https://deno.land/std@0.202.0/assert/fail.ts";
 import {
     InMemoryAccountContext,
@@ -13,7 +14,7 @@ import {
     SubscriptionStream,
 } from "./_libs.ts";
 
-Deno.test("main", async () => {
+Deno.test("main", async (t) => {
     try {
         await Deno.remove("test.sqlite");
     } catch (e) {}
@@ -110,6 +111,19 @@ Deno.test("main", async () => {
         const msg = await stream.chan.pop() as RelayResponse_Event;
         assertEquals(msg.event, event_1);
     }
+
+    await t.step("block pubkey", async () => {
+        const ctx1 = InMemoryAccountContext.Generate();
+        const event_1 = await randomEvent(ctx1, NostrKind.TEXT_NOTE, "1");
+
+        await relay.set_policy({
+            kind: event_1.kind,
+            block: new Set([ctx1.publicKey.hex]),
+        });
+
+        const err = await client.sendEvent(event_1);
+        assertIsError(err, Error);
+    });
 
     await client.close();
     await relay.shutdown();

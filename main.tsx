@@ -2,7 +2,7 @@ import { typeDefs } from "./graphql-schema.ts";
 import { SubscriptionMap, ws_handler } from "./ws.ts";
 import Error404 from "./routes/_404.tsx";
 import { render } from "https://esm.sh/preact-render-to-string@6.4.1";
-import { Mutation, RootResolver } from "./resolvers/root.ts";
+import { RootResolver } from "./resolvers/root.ts";
 import * as gql from "https://esm.sh/graphql@16.8.1";
 
 import { Policy } from "./resolvers/policy.ts";
@@ -29,7 +29,8 @@ export type Relay = {
         kind: NostrKind;
         read?: boolean | undefined;
         write?: boolean | undefined;
-    }) => Promise<Policy>;
+        block?: Set<string>;
+    }) => Promise<Policy | Error>;
     get_policy: (kind: NostrKind) => Promise<Policy>;
     default_policy: DefaultPolicy;
 };

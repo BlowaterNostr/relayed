@@ -1,4 +1,4 @@
-import { NostrEvent, NostrKind } from "../_libs.ts";
+import { NostrKind, PublicKey } from "../_libs.ts";
 import { DefaultPolicy } from "../main.tsx";
 
 export const Policies = (kv: Deno.Kv) =>
@@ -79,7 +79,15 @@ export class PolicyStore {
             policy.allow = args.allow;
         }
         if (args.block) {
-            policy.block = args.block;
+            const blocks = new Set<string>();
+            for (const str of args.block) {
+                const pubkey = PublicKey.FromString(str);
+                if (pubkey instanceof Error) {
+                    return pubkey;
+                }
+                blocks.add(pubkey.bech32());
+            }
+            policy.block = blocks;
         }
         this.policies.set(args.kind, policy);
         await this.kv.set(["policy", args.kind], policy);
