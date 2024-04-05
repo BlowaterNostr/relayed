@@ -14,6 +14,7 @@ import { Policies } from "./resolvers/policy.ts";
 import { interface_GetEventsByAuthors } from "./resolvers/event.ts";
 import Landing from "./routes/landing.tsx";
 import Error404 from "./routes/_404.tsx";
+import { Information, RelayInformation, RelayInformationStore } from "./resolvers/relay.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -32,6 +33,8 @@ export type Relay = {
         block?: Set<string>;
     }) => Promise<Policy | Error>;
     get_policy: (kind: NostrKind) => Promise<Policy>;
+    set_relay_information: (args: RelayInformation) => Promise<RelayInformation>;
+    get_relay_information: () => Promise<RelayInformation>;
     default_policy: DefaultPolicy;
 };
 
@@ -39,7 +42,7 @@ export async function run(args: {
     port: number;
     admin?: PublicKey;
     password?: string;
-    information?: RelayInformation;
+    information: RelayInformation;
     default_policy: DefaultPolicy;
     kv?: Deno.Kv;
 }): Promise<Error | Relay> {
@@ -55,7 +58,7 @@ export async function run(args: {
         args.kv = await Deno.openKv();
     }
 
-    const { port, default_policy } = args;
+    const { port, default_policy, information } = args;
 
     let resolve_hostname;
     const hostname = new Promise<string>((resolve) => {
@@ -64,6 +67,12 @@ export async function run(args: {
 
     const get_all_policies = Policies(args.kv);
     const policyStore = new PolicyStore(default_policy, args.kv, await get_all_policies());
+    const get_relay_information = Information(args.kv);
+    const relayInformationStore = new RelayInformationStore(
+        information,
+        args.kv,
+        await get_relay_information(),
+    );
 
     const eventStore = await EventStore.New(args.kv);
 
@@ -86,6 +95,7 @@ export async function run(args: {
             get_events_by_kinds: eventStore.get_events_by_kinds.bind(eventStore),
             get_events_by_authors: eventStore.get_events_by_authors.bind(eventStore),
             policyStore,
+            relayInformationStore,
             kv: args.kv,
         }),
     );
@@ -99,6 +109,8 @@ export async function run(args: {
         },
         set_policy: policyStore.set_policy,
         get_policy: policyStore.resolvePolicyByKind,
+        set_relay_information: relayInformationStore.set_relay_information,
+        get_relay_information: relayInformationStore.resolveRelayInformation,
         default_policy: args.default_policy,
     };
 }
@@ -117,6 +129,7 @@ const root_handler = (
         default_policy: DefaultPolicy;
         resolvePolicyByKind: func_ResolvePolicyByKind;
         policyStore: PolicyStore;
+        relayInformationStore: RelayInformationStore;
         kv: Deno.Kv;
     } & EventReadWriter,
 ) =>
@@ -143,55 +156,51 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
     return resp;
 };
 
-const graphql_handler =
-    (args: { password: string; kv: Deno.Kv; policyStore: PolicyStore }) => async (req: Request) => {
-        const { password, policyStore } = args;
-        if (req.method == "POST") {
-            const query = await req.json();
-            const nip42 = req.headers.get("nip42");
-            console.log("nip42 header", nip42);
+const graphql_handler = (
+    args: {
+        password: string;
+        kv: Deno.Kv;
+        policyStore: PolicyStore;
+        relayInformationStore: RelayInformationStore;
+    },
+) =>
+async (req: Request) => {
+    const { password, policyStore } = args;
+    if (req.method == "POST") {
+        const query = await req.json();
+        const nip42 = req.headers.get("nip42");
+        console.log("nip42 header", nip42);
 
-            const pw = req.headers.get("password");
-            if (pw != password) {
-                return new Response(`{"errors":"incorrect password"}`);
-            }
-
-            if (nip42) {
-                const auth_event = parseJSON<NostrEvent>(nip42);
-                if (auth_event instanceof Error) {
-                    return new Response(`{errors:["no auth"]}`);
-                }
-                const ok = await verifyEvent(auth_event);
-                if (!ok) {
-                    return new Response(`{"errors":["no auth"]}`);
-                }
-            }
-            const result = await gql.graphql({
-                schema: schema,
-                source: query.query,
-                variableValues: query.variables,
-                rootValue: RootResolver(args),
-            });
-            console.log(result);
-            return new Response(JSON.stringify(result));
-        } else if (req.method == "GET") {
-            const res = new Response(graphiql);
-            res.headers.set("content-type", "html");
-            return res;
-        } else {
-            return new Response(undefined, { status: 405 });
+        const pw = req.headers.get("password");
+        if (pw != password) {
+            return new Response(`{"errors":"incorrect password"}`);
         }
-    };
 
-export type RelayInformation = {
-    name?: string;
-    description?: string;
-    pubkey?: string;
-    contact?: string;
-    supported_nips?: number[];
-    software?: string;
-    version?: string;
-    icon?: string;
+        if (nip42) {
+            const auth_event = parseJSON<NostrEvent>(nip42);
+            if (auth_event instanceof Error) {
+                return new Response(`{errors:["no auth"]}`);
+            }
+            const ok = await verifyEvent(auth_event);
+            if (!ok) {
+                return new Response(`{"errors":["no auth"]}`);
+            }
+        }
+        const result = await gql.graphql({
+            schema: schema,
+            source: query.query,
+            variableValues: query.variables,
+            rootValue: RootResolver(args),
+        });
+        console.log(result);
+        return new Response(JSON.stringify(result));
+    } else if (req.method == "GET") {
+        const res = new Response(graphiql);
+        res.headers.set("content-type", "html");
+        return res;
+    } else {
+        return new Response(undefined, { status: 405 });
+    }
 };
 
 export const supported_nips = [1, 2];

@@ -24,6 +24,9 @@ Deno.test("main", async (t) => {
         default_policy: {
             allowed_kinds: "none",
         },
+        information: {
+            name: "Nostr Relay",
+        },
         kv: await Deno.openKv("test.sqlite"),
     }) as Relay;
 
@@ -126,6 +129,51 @@ Deno.test("main", async (t) => {
     });
 
     await client.close();
+    await relay.shutdown();
+});
+
+Deno.test("relay information", async (t) => {
+    try {
+        await Deno.remove("test.sqlite");
+    } catch (e) {}
+    const relay = await run({
+        password: "123",
+        port: 8080,
+        default_policy: {
+            allowed_kinds: "none",
+        },
+        information: {
+            name: "Nostr Relay",
+        },
+        kv: await Deno.openKv("test.sqlite"),
+    }) as Relay;
+
+    await t.step("get relay information", async () => {
+        const information = await relay.get_relay_information();
+        console.log(`information`, information);
+
+        assertEquals(information.name, "Nostr Relay");
+    });
+
+    await t.step("set relay name", async () => {
+        await relay.set_relay_information({
+            name: "Nostr Relay2",
+        });
+
+        const information2 = await relay.get_relay_information();
+        assertEquals(information2.name, "Nostr Relay2");
+    });
+
+    await t.step("set relay supports nips", async () => {
+        await relay.set_relay_information({
+            supported_nips: [1, 2, 3],
+        });
+
+        const information2 = await relay.get_relay_information();
+        assertEquals(information2.name, "Nostr Relay2");
+        assertEquals(information2.supported_nips, [1, 2, 3]);
+    });
+
     await relay.shutdown();
 });
 

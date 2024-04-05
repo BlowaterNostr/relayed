@@ -1,4 +1,5 @@
-import { RelayInformation, software, supported_nips } from "../main.tsx";
+import { software, supported_nips } from "../main.tsx";
+import { RelayInformation } from "../resolvers/relay.ts";
 
 export default function Landing(information?: RelayInformation) {
     return (

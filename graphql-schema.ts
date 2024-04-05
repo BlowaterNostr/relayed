@@ -5,6 +5,7 @@ export const typeDefs = gql`
     events(pubkey: String, offset: Int, limit: Int): Events
     event(id: String): Event
     policies: [Policy]
+    relayInformation: RelayInformation
   }
 
   type Mutation {
@@ -13,6 +14,7 @@ export const typeDefs = gql`
     add_allow(kind: Int, pubkey: String, ): Policy!
     remove_allow(kind: Int, pubkey: String, ): Policy!
     set_policy(kind: Int, read: Boolean, write: Boolean): Policy!
+    set_relay_information(name: String, description: String, pubkey: String, contact: String, supported_nips: [Int], software: String, version: String, icon: String): RelayInformation!
   }
 
   type Events {
@@ -39,5 +41,15 @@ export const typeDefs = gql`
     write: Boolean!
     allow: [String!]!
     block: [String!]!
+  }
+  type RelayInformation {
+    name: String
+    description: String
+    pubkey: String
+    contact: String
+    supported_nips: [Int]
+    software: String
+    version: String
+    icon: String
   }
 `;
