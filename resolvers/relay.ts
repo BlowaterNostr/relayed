@@ -8,6 +8,15 @@ export type RelayInformation = {
     version?: string;
     icon?: string;
 };
+export const not_modifiable_information: {
+    software: string;
+    supported_nips: number[];
+    version: string;
+} = {
+    software: "https://github.com/BlowaterNostr/relayed",
+    supported_nips: [1, 2, 11],
+    version: "RC5",
+};
 
 export const Information = async (kv: Deno.Kv) => {
     const res = await kv.get<RelayInformation>(["relay_information"]);
@@ -16,11 +25,6 @@ export const Information = async (kv: Deno.Kv) => {
 };
 
 export class RelayInformationStore {
-    not_modifiable_information: RelayInformation = {
-        software: "https://github.com/BlowaterNostr/relayed",
-        supported_nips: [1, 2, 11],
-        version: "RC5",
-    };
     default_information: RelayInformation;
 
     constructor(
@@ -32,7 +36,7 @@ export class RelayInformationStore {
 
     resolveRelayInformation = async (): Promise<RelayInformation> => {
         const get_relay_information = await Information(this.kv);
-        return { ...this.default_information, ...get_relay_information, ...this.not_modifiable_information };
+        return { ...this.default_information, ...get_relay_information, ...not_modifiable_information };
     };
 
     set_relay_information = async (
@@ -61,6 +65,6 @@ export class RelayInformationStore {
             information_for_modifications.icon = args.icon;
         }
         await this.kv.set(["relay_information"], information_for_modifications);
-        return { ...information_for_modifications, ...this.not_modifiable_information };
+        return { ...information_for_modifications, ...not_modifiable_information };
     };
 }

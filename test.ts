@@ -13,6 +13,7 @@ import {
     SingleRelayConnection,
     SubscriptionStream,
 } from "./_libs.ts";
+import { not_modifiable_information } from "./resolvers/relay.ts";
 
 const test_kv = async () => await Deno.openKv("test.sqlite");
 
@@ -152,7 +153,7 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
         const information = await relay.get_relay_information();
         console.log(`information`, information);
 
-        assertEquals(information.name, "Nostr Relay");
+        assertEquals(information, { name: "Nostr Relay", ...not_modifiable_information });
     });
 
     await t.step("set relay information", async () => {
@@ -161,7 +162,7 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
         });
 
         const information2 = await relay.get_relay_information();
-        assertEquals(information2.name, "Nostr Relay2");
+        assertEquals(information2, { name: "Nostr Relay2", ...not_modifiable_information });
     });
 
     await relay.shutdown();
