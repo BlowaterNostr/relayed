@@ -166,7 +166,7 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
     });
 
     await t.step("graphql", async () => {
-        const query = await Deno.readTextFile("./queries/getRelayInfomation.gql")
+        const query = await Deno.readTextFile("./queries/getRelayInformation.gql");
         const json = await queryGql(relay, query);
         assertEquals(json.data.relayInformation.name, "Nostr Relay2");
     });
