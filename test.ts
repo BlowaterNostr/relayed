@@ -14,6 +14,8 @@ import {
     SubscriptionStream,
 } from "./_libs.ts";
 
+const test_kv = async () => await Deno.openKv("test.sqlite");
+
 Deno.test("main", async (t) => {
     try {
         await Deno.remove("test.sqlite");
@@ -24,7 +26,7 @@ Deno.test("main", async (t) => {
         default_policy: {
             allowed_kinds: "none",
         },
-        kv: await Deno.openKv("test.sqlite"),
+        kv: await test_kv(),
     }) as Relay;
 
     const policy = await relay.get_policy(NostrKind.CONTACTS);
@@ -143,7 +145,7 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
         default_information: {
             name: "Nostr Relay",
         },
-        kv: await Deno.openKv("test.sqlite"),
+        kv: await test_kv(),
     }) as Relay;
 
     await t.step("get relay information", async () => {

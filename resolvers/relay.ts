@@ -10,10 +10,10 @@ export type RelayInformation = {
 };
 
 export const Information = async (kv: Deno.Kv) => {
-        const res = await kv.get<RelayInformation>(["relay_information"]);
-        if (res.value == null) return null;
-        return res.value;
-}
+    const res = await kv.get<RelayInformation>(["relay_information"]);
+    if (res.value == null) return null;
+    return res.value;
+};
 
 export class RelayInformationStore {
     not_modifiable_information: RelayInformation = {
@@ -21,18 +21,18 @@ export class RelayInformationStore {
         supported_nips: [1, 2, 11],
         version: "RC5",
     };
-    default_information: RelayInformation
+    default_information: RelayInformation;
 
     constructor(
         private kv: Deno.Kv,
         default_information?: RelayInformation,
     ) {
-        this.default_information = default_information?default_information:{};
+        this.default_information = default_information ? default_information : {};
     }
 
     resolveRelayInformation = async (): Promise<RelayInformation> => {
         const get_relay_information = await Information(this.kv);
-        return {...this.default_information,...get_relay_information, ...this.not_modifiable_information};
+        return { ...this.default_information, ...get_relay_information, ...this.not_modifiable_information };
     };
 
     set_relay_information = async (
@@ -61,6 +61,6 @@ export class RelayInformationStore {
             information_for_modifications.icon = args.icon;
         }
         await this.kv.set(["relay_information"], information_for_modifications);
-        return {...information_for_modifications, ...this.not_modifiable_information};
+        return { ...information_for_modifications, ...this.not_modifiable_information };
     };
 }

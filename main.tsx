@@ -204,8 +204,10 @@ async (req: Request) => {
 export const supported_nips = [1, 2];
 export const software = "https://github.com/BlowaterNostr/relayed";
 
-const landing_handler = async (args: { relayInformationStore: RelayInformationStore  }) => {
-    const resp = new Response(render(Landing(await args.relayInformationStore.resolveRelayInformation()), { status: 200 }));
+const landing_handler = async (args: { relayInformationStore: RelayInformationStore }) => {
+    const resp = new Response(
+        render(Landing(await args.relayInformationStore.resolveRelayInformation()), { status: 200 }),
+    );
     resp.headers.set("content-type", "html");
     return resp;
 };
