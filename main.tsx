@@ -14,7 +14,7 @@ import { Policies } from "./resolvers/policy.ts";
 import { interface_GetEventsByAuthors } from "./resolvers/event.ts";
 import Landing from "./routes/landing.tsx";
 import Error404 from "./routes/_404.tsx";
-import { Information, RelayInformation, RelayInformationStore } from "./resolvers/relay.ts";
+import { Information, RelayInformation, RelayInformationStore } from "./resolvers/nip11.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 

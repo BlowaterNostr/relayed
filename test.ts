@@ -13,7 +13,7 @@ import {
     SingleRelayConnection,
     SubscriptionStream,
 } from "./_libs.ts";
-import { not_modifiable_information } from "./resolvers/relay.ts";
+import { not_modifiable_information } from "./resolvers/nip11.ts";
 
 const test_kv = async () => await Deno.openKv("test.sqlite");
 
