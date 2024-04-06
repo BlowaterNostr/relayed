@@ -1,6 +1,5 @@
 import { PolicyStore } from "./policy.ts";
 import { Policies } from "./policy.ts";
-import { Information } from "./nip11.ts";
 import { RelayInformationStore } from "./nip11.ts";
 
 export const Mutation = (args: {

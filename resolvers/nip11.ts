@@ -1,3 +1,5 @@
+import { __Directive } from "https://esm.sh/graphql@16.8.1";
+
 export type RelayInformation = {
     name?: string;
     description?: string;
@@ -8,6 +10,7 @@ export type RelayInformation = {
     version?: string;
     icon?: string;
 };
+
 export const not_modifiable_information: {
     software: string;
     supported_nips: number[];
@@ -16,12 +19,6 @@ export const not_modifiable_information: {
     software: "https://github.com/BlowaterNostr/relayed",
     supported_nips: [1, 2, 11],
     version: "RC5",
-};
-
-export const Information = async (kv: Deno.Kv) => {
-    const res = await kv.get<RelayInformation>(["relay_information"]);
-    if (res.value == null) return null;
-    return res.value;
 };
 
 export class RelayInformationStore {
@@ -35,7 +32,7 @@ export class RelayInformationStore {
     }
 
     resolveRelayInformation = async (): Promise<RelayInformation> => {
-        const get_relay_information = await Information(this.kv);
+        const get_relay_information = (await this.kv.get<RelayInformation>(["relay_information"])).value;
         return { ...this.default_information, ...get_relay_information, ...not_modifiable_information };
     };
 
