@@ -1,0 +1,12 @@
+query getRelayInformation {
+  relayInformation {
+    name
+    contact
+    description
+    icon
+    pubkey
+    software
+    supported_nips
+    version
+  }
+}

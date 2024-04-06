@@ -165,6 +165,20 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
         assertEquals(information2, { name: "Nostr Relay2", ...not_modifiable_information });
     });
 
+    await t.step("graphql", async () => {
+        const { hostname, port } = new URL(relay.url);
+        const res = await fetch(`http://${hostname}:${port}/api`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "password": "123",
+            },
+            body: JSON.stringify({ query: await Deno.readTextFile("./queries/getRelayInfomation.gql") }),
+        });
+        const json = await res.json();
+        assertEquals(json.data.relayInformation.name, "Nostr Relay2");
+    });
+
     await relay.shutdown();
 });
 
