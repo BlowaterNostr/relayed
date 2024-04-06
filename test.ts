@@ -168,8 +168,6 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
     await relay.shutdown();
 });
 
-Deno.test("graphql", async () => {});
-
 async function randomEvent(ctx: InMemoryAccountContext, kind?: NostrKind, content?: string) {
     const event = await prepareNormalNostrEvent(ctx, {
         kind: kind || NostrKind.TEXT_NOTE,
