@@ -24,9 +24,6 @@ Deno.test("main", async (t) => {
         default_policy: {
             allowed_kinds: "none",
         },
-        information: {
-            name: "Nostr Relay",
-        },
         kv: await Deno.openKv("test.sqlite"),
     }) as Relay;
 
@@ -132,7 +129,8 @@ Deno.test("main", async (t) => {
     await relay.shutdown();
 });
 
-Deno.test("relay information", async (t) => {
+// https://github.com/nostr-protocol/nips/blob/master/11.md
+Deno.test("NIP-11: Relay Information Document", async (t) => {
     try {
         await Deno.remove("test.sqlite");
     } catch (e) {}
@@ -142,7 +140,7 @@ Deno.test("relay information", async (t) => {
         default_policy: {
             allowed_kinds: "none",
         },
-        information: {
+        default_information: {
             name: "Nostr Relay",
         },
         kv: await Deno.openKv("test.sqlite"),
@@ -155,23 +153,13 @@ Deno.test("relay information", async (t) => {
         assertEquals(information.name, "Nostr Relay");
     });
 
-    await t.step("set relay name", async () => {
+    await t.step("set relay information", async () => {
         await relay.set_relay_information({
             name: "Nostr Relay2",
         });
 
         const information2 = await relay.get_relay_information();
         assertEquals(information2.name, "Nostr Relay2");
-    });
-
-    await t.step("set relay supports nips", async () => {
-        await relay.set_relay_information({
-            supported_nips: [1, 2, 3],
-        });
-
-        const information2 = await relay.get_relay_information();
-        assertEquals(information2.name, "Nostr Relay2");
-        assertEquals(information2.supported_nips, [1, 2, 3]);
     });
 
     await relay.shutdown();

@@ -42,7 +42,7 @@ export async function run(args: {
     port: number;
     admin?: PublicKey;
     password?: string;
-    information: RelayInformation;
+    default_information?: RelayInformation;
     default_policy: DefaultPolicy;
     kv?: Deno.Kv;
 }): Promise<Error | Relay> {
@@ -58,7 +58,7 @@ export async function run(args: {
         args.kv = await Deno.openKv();
     }
 
-    const { port, default_policy, information } = args;
+    const { port, default_policy, default_information } = args;
 
     let resolve_hostname;
     const hostname = new Promise<string>((resolve) => {
@@ -69,9 +69,9 @@ export async function run(args: {
     const policyStore = new PolicyStore(default_policy, args.kv, await get_all_policies());
     const get_relay_information = Information(args.kv);
     const relayInformationStore = new RelayInformationStore(
-        information,
         args.kv,
         await get_relay_information(),
+        default_information,
     );
 
     const eventStore = await EventStore.New(args.kv);

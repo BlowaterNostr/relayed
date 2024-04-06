@@ -52,5 +52,6 @@ You can now utilize the GraphQL Playground to communicate with the server.
 
 Relay url is `ws://localhost:8000`.
 
-### Join our community 
+### Join our community
+
 wss://relayed.deno.dev

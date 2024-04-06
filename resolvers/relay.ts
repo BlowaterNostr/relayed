@@ -24,21 +24,15 @@ export class RelayInformationStore {
     };
 
     constructor(
-        default_information: RelayInformation,
         private kv: Deno.Kv,
         initial_information: RelayInformation | null,
+        default_information?: RelayInformation,
     ) {
-        if (initial_information == null) {
-            this.information = {
-                ...this.information,
-                ...default_information,
-            };
-        } else {
-            this.information = {
-                ...this.information,
-                ...initial_information,
-            };
-        }
+        this.information = {
+            ...default_information,
+            ...initial_information,
+            ...this.information,
+        };
     }
 
     resolveRelayInformation = async (): Promise<RelayInformation> => {
@@ -51,9 +45,6 @@ export class RelayInformationStore {
             description?: string;
             pubkey?: string;
             contact?: string;
-            supported_nips?: number[];
-            software?: string;
-            version?: string;
             icon?: string;
         } | RelayInformation,
     ) => {
@@ -69,15 +60,6 @@ export class RelayInformationStore {
         }
         if (args.contact != undefined) {
             information.contact = args.contact;
-        }
-        if (args.supported_nips != undefined) {
-            information.supported_nips = args.supported_nips;
-        }
-        if (args.software != undefined) {
-            information.software = args.software;
-        }
-        if (args.version != undefined) {
-            information.version = args.version;
         }
         if (args.icon != undefined) {
             information.icon = args.icon;
