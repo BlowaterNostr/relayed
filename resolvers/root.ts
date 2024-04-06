@@ -46,7 +46,7 @@ export function RootResolver(args: {
 }) {
     return {
         policies: Policies(args.kv),
-        relayInformation: Information(args.kv),
+        relayInformation: args.relayInformationStore.resolveRelayInformation,
         ...Mutation(args),
     };
 }
