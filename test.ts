@@ -165,7 +165,7 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
         assertEquals(information2, { name: "Nostr Relay2", ...not_modifiable_information });
     });
 
-    await t.step("graphql", async () => {
+    await t.step("graphql get relay information", async () => {
         const query = await Deno.readTextFile("./queries/getRelayInformation.gql");
         const json = await queryGql(relay, query);
         assertEquals(json.data.relayInformation, {
