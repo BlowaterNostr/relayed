@@ -166,16 +166,8 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
     });
 
     await t.step("graphql", async () => {
-        const { hostname, port } = new URL(relay.url);
-        const res = await fetch(`http://${hostname}:${port}/api`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "password": "123",
-            },
-            body: JSON.stringify({ query: await Deno.readTextFile("./queries/getRelayInfomation.gql") }),
-        });
-        const json = await res.json();
+        const query = await Deno.readTextFile("./queries/getRelayInfomation.gql")
+        const json = await queryGql(relay, query);
         assertEquals(json.data.relayInformation.name, "Nostr Relay2");
     });
 
@@ -188,4 +180,17 @@ async function randomEvent(ctx: InMemoryAccountContext, kind?: NostrKind, conten
         content: content || "",
     });
     return event;
+}
+
+async function queryGql(relay: Relay, query: string) {
+    const { hostname, port } = new URL(relay.url);
+    const res = await fetch(`http://${hostname}:${port}/api`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "password": "123",
+        },
+        body: JSON.stringify({ query }),
+    });
+    return await res.json();
 }
