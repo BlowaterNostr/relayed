@@ -9,34 +9,30 @@ export type RelayInformation = {
     icon?: string;
 };
 
-export const Information = (kv: Deno.Kv) =>
-    async function () {
+export const Information = async (kv: Deno.Kv) => {
         const res = await kv.get<RelayInformation>(["relay_information"]);
         if (res.value == null) return null;
         return res.value;
-    };
+}
 
 export class RelayInformationStore {
-    information: RelayInformation = {
+    not_modifiable_information: RelayInformation = {
         software: "https://github.com/BlowaterNostr/relayed",
-        supported_nips: [1, 2],
+        supported_nips: [1, 2, 11],
         version: "RC5",
     };
+    default_information: RelayInformation
 
     constructor(
         private kv: Deno.Kv,
-        initial_information: RelayInformation | null,
         default_information?: RelayInformation,
     ) {
-        this.information = {
-            ...default_information,
-            ...initial_information,
-            ...this.information,
-        };
+        this.default_information = default_information?default_information:{};
     }
 
     resolveRelayInformation = async (): Promise<RelayInformation> => {
-        return this.information;
+        const get_relay_information = await Information(this.kv);
+        return {...this.default_information,...get_relay_information, ...this.not_modifiable_information};
     };
 
     set_relay_information = async (
@@ -48,23 +44,23 @@ export class RelayInformationStore {
             icon?: string;
         } | RelayInformation,
     ) => {
-        const information = this.information;
+        const information_for_modifications = await this.resolveRelayInformation();
         if (args.name != undefined) {
-            information.name = args.name;
+            information_for_modifications.name = args.name;
         }
         if (args.description != undefined) {
-            information.description = args.description;
+            information_for_modifications.description = args.description;
         }
         if (args.pubkey != undefined) {
-            information.pubkey = args.pubkey;
+            information_for_modifications.pubkey = args.pubkey;
         }
         if (args.contact != undefined) {
-            information.contact = args.contact;
+            information_for_modifications.contact = args.contact;
         }
         if (args.icon != undefined) {
-            information.icon = args.icon;
+            information_for_modifications.icon = args.icon;
         }
-        await this.kv.set(["relay_information"], information);
-        return information;
+        await this.kv.set(["relay_information"], information_for_modifications);
+        return {...information_for_modifications, ...this.not_modifiable_information};
     };
 }

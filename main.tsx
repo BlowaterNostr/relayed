@@ -67,10 +67,8 @@ export async function run(args: {
 
     const get_all_policies = Policies(args.kv);
     const policyStore = new PolicyStore(default_policy, args.kv, await get_all_policies());
-    const get_relay_information = Information(args.kv);
     const relayInformationStore = new RelayInformationStore(
         args.kv,
-        await get_relay_information(),
         default_information,
     );
 
@@ -206,14 +204,14 @@ async (req: Request) => {
 export const supported_nips = [1, 2];
 export const software = "https://github.com/BlowaterNostr/relayed";
 
-const landing_handler = (args: { information?: RelayInformation }) => {
-    const resp = new Response(render(Landing(args.information)), { status: 200 });
+const landing_handler = async (args: { relayInformationStore: RelayInformationStore  }) => {
+    const resp = new Response(render(Landing(await args.relayInformationStore.resolveRelayInformation()), { status: 200 }));
     resp.headers.set("content-type", "html");
     return resp;
 };
 
-const information_handler = (args: { information?: RelayInformation }) => {
-    const resp = new Response(JSON.stringify({ ...args.information, supported_nips, software }), {
+const information_handler = async (args: { relayInformationStore: RelayInformationStore }) => {
+    const resp = new Response(JSON.stringify(await args.relayInformationStore.resolveRelayInformation()), {
         status: 200,
     });
     resp.headers.set("content-type", "application/json; charset=utf-8");
