@@ -1,5 +1,3 @@
-import { __Directive } from "https://esm.sh/graphql@16.8.1";
-
 export type RelayInformation = {
     name?: string;
     description?: string;
@@ -43,7 +41,7 @@ export class RelayInformationStore {
             pubkey?: string;
             contact?: string;
             icon?: string;
-        } | RelayInformation,
+        },
     ) => {
         const information_for_modifications = await this.resolveRelayInformation();
         if (args.name != undefined) {

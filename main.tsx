@@ -25,6 +25,7 @@ export type DefaultPolicy = {
 export type Relay = {
     server: Deno.HttpServer;
     url: string;
+    password: string;
     shutdown: () => Promise<void>;
     set_policy: (args: {
         kind: NostrKind;
@@ -100,6 +101,7 @@ export async function run(args: {
 
     return {
         server,
+        password,
         url: `ws://${await hostname}:${port}`,
         shutdown: async () => {
             await server.shutdown();

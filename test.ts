@@ -168,7 +168,30 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
     await t.step("graphql", async () => {
         const query = await Deno.readTextFile("./queries/getRelayInformation.gql");
         const json = await queryGql(relay, query);
-        assertEquals(json.data.relayInformation.name, "Nostr Relay2");
+        assertEquals(json.data.relayInformation, {
+            name: "Nostr Relay2",
+            icon: null,
+            contact: null,
+            description: null,
+            pubkey: null,
+            ...not_modifiable_information,
+        });
+    });
+
+    await t.step("graphql set relay information", async () => {
+        const variables = {
+            name: "Nostr Relay3",
+        };
+        const query = await Deno.readTextFile("./queries/setRelayInformation.gql");
+        const json = await queryGql(relay, query, variables);
+        assertEquals(json.data.set_relay_information, {
+            name: "Nostr Relay3",
+            icon: null,
+            contact: null,
+            description: null,
+            pubkey: null,
+            ...not_modifiable_information,
+        });
     });
 
     await relay.shutdown();
@@ -182,15 +205,15 @@ async function randomEvent(ctx: InMemoryAccountContext, kind?: NostrKind, conten
     return event;
 }
 
-async function queryGql(relay: Relay, query: string) {
+async function queryGql(relay: Relay, query: string, variables?: Record<string, any>) {
     const { hostname, port } = new URL(relay.url);
     const res = await fetch(`http://${hostname}:${port}/api`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
-            "password": "123",
+            "password": relay.password,
         },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({ query, variables }),
     });
     return await res.json();
 }
