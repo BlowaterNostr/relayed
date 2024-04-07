@@ -14,17 +14,28 @@ import {
     SubscriptionStream,
 } from "./_libs.ts";
 
-Deno.test("main", async (t) => {
+const test_kv = async () => {
     try {
         await Deno.remove("test.sqlite");
     } catch (e) {}
+    return await Deno.openKv("test.sqlite");
+};
+
+// Need to keep consistent with resolvers/nip11.ts
+const not_modifiable_information = {
+    software: "https://github.com/BlowaterNostr/relayed",
+    supported_nips: [1, 2, 11],
+    version: "RC5",
+};
+
+Deno.test("main", async (t) => {
     const relay = await run({
         password: "123",
         port: 8080,
         default_policy: {
             allowed_kinds: "none",
         },
-        kv: await Deno.openKv("test.sqlite"),
+        kv: await test_kv(),
     }) as Relay;
 
     const policy = await relay.get_policy(NostrKind.CONTACTS);
@@ -129,7 +140,67 @@ Deno.test("main", async (t) => {
     await relay.shutdown();
 });
 
-Deno.test("graphql", async () => {});
+// https://github.com/nostr-protocol/nips/blob/master/11.md
+Deno.test("NIP-11: Relay Information Document", async (t) => {
+    const relay = await run({
+        password: "123",
+        port: 8080,
+        default_policy: {
+            allowed_kinds: "none",
+        },
+        default_information: {
+            name: "Nostr Relay",
+        },
+        kv: await test_kv(),
+    }) as Relay;
+
+    await t.step("get relay information", async () => {
+        const information = await relay.get_relay_information();
+        console.log(`information`, information);
+
+        assertEquals(information, { name: "Nostr Relay", ...not_modifiable_information });
+    });
+
+    await t.step("set relay information", async () => {
+        await relay.set_relay_information({
+            name: "Nostr Relay2",
+        });
+
+        const information2 = await relay.get_relay_information();
+        assertEquals(information2, { name: "Nostr Relay2", ...not_modifiable_information });
+    });
+
+    await t.step("graphql get relay information", async () => {
+        const query = await Deno.readTextFile("./queries/getRelayInformation.gql");
+        const json = await queryGql(relay, query);
+        assertEquals(json.data.relayInformation, {
+            name: "Nostr Relay2",
+            icon: null,
+            contact: null,
+            description: null,
+            pubkey: null,
+            ...not_modifiable_information,
+        });
+    });
+
+    await t.step("graphql set relay information", async () => {
+        const variables = {
+            name: "Nostr Relay3",
+        };
+        const query = await Deno.readTextFile("./queries/setRelayInformation.gql");
+        const json = await queryGql(relay, query, variables);
+        assertEquals(json.data.set_relay_information, {
+            name: "Nostr Relay3",
+            icon: null,
+            contact: null,
+            description: null,
+            pubkey: null,
+            ...not_modifiable_information,
+        });
+    });
+
+    await relay.shutdown();
+});
 
 async function randomEvent(ctx: InMemoryAccountContext, kind?: NostrKind, content?: string) {
     const event = await prepareNormalNostrEvent(ctx, {
@@ -137,4 +208,17 @@ async function randomEvent(ctx: InMemoryAccountContext, kind?: NostrKind, conten
         content: content || "",
     });
     return event;
+}
+
+async function queryGql(relay: Relay, query: string, variables?: Record<string, any>) {
+    const { hostname, port } = new URL(relay.url);
+    const res = await fetch(`http://${hostname}:${port}/api`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "password": relay.password,
+        },
+        body: JSON.stringify({ query, variables }),
+    });
+    return await res.json();
 }

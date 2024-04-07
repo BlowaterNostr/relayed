@@ -6,7 +6,7 @@ const relay = await run({
         allowed_kinds: "all", // or none,
     },
     password: Deno.env.get("relayed_pw"),
-    information: {
+    default_information: {
         name: "Relayed Example",
         description: "A lightweight relay written in Deno.",
         pubkey: "",
