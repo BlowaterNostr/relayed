@@ -15,6 +15,10 @@ import { interface_GetEventsByAuthors } from "./resolvers/event.ts";
 import Landing from "./routes/landing.tsx";
 import Error404 from "./routes/_404.tsx";
 import { RelayInformation, RelayInformationStore } from "./resolvers/nip11.ts";
+import { DB } from "https://deno.land/x/sqlite/mod.ts";
+
+// Open a database
+const db = new DB("test.db");
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
