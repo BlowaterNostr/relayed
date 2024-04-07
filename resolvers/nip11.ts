@@ -43,8 +43,8 @@ export class RelayInformationStore {
             icon?: string;
         },
     ) => {
-        const information_for_modifications = await this.resolveRelayInformation();
-        const new_information = { ...information_for_modifications, ...args };
+        const old_information = await this.resolveRelayInformation();
+        const new_information = { ...old_information, ...args };
         await this.kv.set(["relay_information"], new_information);
         return { ...new_information, ...not_modifiable_information };
     };
