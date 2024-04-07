@@ -47,7 +47,7 @@ export const typeDefs = gql`
     description: String
     pubkey: String
     contact: String
-    supported_nips: [Int]
+    supported_nips: [Int!]
     software: String
     version: String
     icon: String
