@@ -9,7 +9,7 @@ export type RelayInformation = {
     icon?: string;
 };
 
-export const not_modifiable_information: {
+const not_modifiable_information: {
     software: string;
     supported_nips: number[];
     version: string;

@@ -13,13 +13,19 @@ import {
     SingleRelayConnection,
     SubscriptionStream,
 } from "./_libs.ts";
-import { not_modifiable_information } from "./resolvers/nip11.ts";
 
 const test_kv = async () => {
     try {
         await Deno.remove("test.sqlite");
     } catch (e) {}
     return await Deno.openKv("test.sqlite");
+};
+
+// Need to keep consistent with resolvers/nip11.ts
+const not_modifiable_information = {
+    software: "https://github.com/BlowaterNostr/relayed",
+    supported_nips: [1, 2, 11],
+    version: "RC5",
 };
 
 Deno.test("main", async (t) => {
