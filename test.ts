@@ -15,12 +15,14 @@ import {
 } from "./_libs.ts";
 import { not_modifiable_information } from "./resolvers/nip11.ts";
 
-const test_kv = async () => await Deno.openKv("test.sqlite");
-
-Deno.test("main", async (t) => {
+const test_kv = async () => {
     try {
         await Deno.remove("test.sqlite");
     } catch (e) {}
+    return await Deno.openKv("test.sqlite");
+};
+
+Deno.test("main", async (t) => {
     const relay = await run({
         password: "123",
         port: 8080,
@@ -134,9 +136,6 @@ Deno.test("main", async (t) => {
 
 // https://github.com/nostr-protocol/nips/blob/master/11.md
 Deno.test("NIP-11: Relay Information Document", async (t) => {
-    try {
-        await Deno.remove("test.sqlite");
-    } catch (e) {}
     const relay = await run({
         password: "123",
         port: 8080,
