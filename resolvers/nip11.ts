@@ -44,22 +44,8 @@ export class RelayInformationStore {
         },
     ) => {
         const information_for_modifications = await this.resolveRelayInformation();
-        if (args.name != undefined) {
-            information_for_modifications.name = args.name;
-        }
-        if (args.description != undefined) {
-            information_for_modifications.description = args.description;
-        }
-        if (args.pubkey != undefined) {
-            information_for_modifications.pubkey = args.pubkey;
-        }
-        if (args.contact != undefined) {
-            information_for_modifications.contact = args.contact;
-        }
-        if (args.icon != undefined) {
-            information_for_modifications.icon = args.icon;
-        }
-        await this.kv.set(["relay_information"], information_for_modifications);
-        return { ...information_for_modifications, ...not_modifiable_information };
+        const new_information = { ...information_for_modifications, ...args };
+        await this.kv.set(["relay_information"], new_information);
+        return { ...new_information, ...not_modifiable_information };
     };
 }
