@@ -227,6 +227,17 @@ async function handle_filter(args: {
             event_candidates.set(event.id, event);
         }
     }
+    if (filter.authors) {
+        if (event_candidates.size > 0) {
+            console.log("event_candidates", event_candidates);
+        } else {
+            const events = args.get_events_by_authors(new Set(filter.authors));
+            for await (const event of events) {
+                console.log(event);
+                event_candidates.set(event.id, event);
+            }
+        }
+    }
     if (filter.kinds) {
         if (event_candidates.size > 0) {
             const keys = Array.from(event_candidates.keys());
@@ -237,19 +248,8 @@ async function handle_filter(args: {
                 }
                 event_candidates.delete(key);
             }
-        } else {
+        } else if (!filter.authors) {
             const events = get_events_by_kinds(new Set(filter.kinds));
-            for await (const event of events) {
-                console.log(event);
-                event_candidates.set(event.id, event);
-            }
-        }
-    }
-    if (filter.authors) {
-        if (event_candidates.size > 0) {
-            console.log("event_candidates", event_candidates);
-        } else {
-            const events = args.get_events_by_authors(new Set(filter.authors));
             for await (const event of events) {
                 console.log(event);
                 event_candidates.set(event.id, event);

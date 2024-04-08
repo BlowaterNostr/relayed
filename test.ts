@@ -13,7 +13,10 @@ import {
     SingleRelayConnection,
     SubscriptionStream,
 } from "./_libs.ts";
-import { limit } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/relay-single-test.ts";
+import {
+    limit,
+    no_event,
+} from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/relay-single-test.ts";
 
 const test_kv = async () => {
     try {
@@ -139,6 +142,7 @@ Deno.test("main", async (t) => {
 
     await t.step("nip1", async () => {
         await limit(relay.url)();
+        await no_event(relay.url)();
     });
 
     await client.close();
