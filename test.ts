@@ -13,6 +13,7 @@ import {
     SingleRelayConnection,
     SubscriptionStream,
 } from "./_libs.ts";
+import { limit } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/relay-single-test.ts";
 
 const test_kv = async () => {
     try {
@@ -136,6 +137,11 @@ Deno.test("main", async (t) => {
         assertIsError(err, Error);
     });
 
+
+    await t.step("nip1", async () => {
+        await limit(relay.url)()
+    });
+
     await client.close();
     await relay.shutdown();
 });
@@ -210,7 +216,7 @@ async function randomEvent(ctx: InMemoryAccountContext, kind?: NostrKind, conten
     return event;
 }
 
-async function queryGql(relay: Relay, query: string, variables?: Record<string, any>) {
+async function queryGql(relay: Relay, query: string, variables?: object) {
     const { hostname, port } = new URL(relay.url);
     const res = await fetch(`http://${hostname}:${port}/api`, {
         method: "POST",

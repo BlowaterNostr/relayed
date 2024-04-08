@@ -1,4 +1,12 @@
-import { NostrEvent, NostrKind } from "../_libs.ts";
+import {
+    InMemoryAccountContext,
+    NostrEvent,
+    NostrFilter,
+    NostrKind,
+    prepareNormalNostrEvent,
+} from "../_libs.ts";
+import { EventReadWriter } from "../main.tsx";
+import { assertEquals } from "https://deno.land/std@0.202.0/assert/assert_equals.ts";
 
 export type Actor = {
     type: "admin";
@@ -27,17 +35,14 @@ export type interface_GetEventsByAuthors = {
     get_events_by_authors: func_GetEventsByAuthors;
 };
 
+export type func_GetEventsByFilter = (filter: NostrFilter) => AsyncIterable<NostrEvent>;
+
 export type func_WriteEvent = (event: NostrEvent) => Promise<boolean>;
 export type interface_WriteEvent = {
     write_event: func_WriteEvent;
 };
 
-export class EventStore
-    implements
-        interface_GetEventsByAuthors,
-        interface_WriteEvent,
-        interface_GetEventsByIDs,
-        interface_GetEventsByKinds {
+export class EventStore implements EventReadWriter {
     private constructor(
         private events: Map<string, NostrEvent>,
         private kv: Deno.Kv,
@@ -77,6 +82,18 @@ export class EventStore
         }
     }
 
+    async *get_events_by_filter(filter: NostrFilter) {
+        let i = 0;
+        for (const event of this.events.values()) {
+            if (isMatched(event, filter)) {
+                if (filter.limit && i < filter.limit) {
+                    yield event;
+                }
+                i++;
+            }
+        }
+    }
+
     async write_event(event: NostrEvent) {
         console.log("write_event", event);
         const result = await this.kv.atomic()
@@ -92,3 +109,38 @@ export class EventStore
         return result.ok;
     }
 }
+
+function isMatched(event: NostrEvent, filter: NostrFilter) {
+    const kinds = filter.kinds || [];
+    const authors = filter.authors || [];
+    const ids = filter.ids || [];
+    const ps = filter["#p"] || [];
+    const es = filter["#e"] || [];
+
+    const match_kind = kinds.length == 0 ? true : kinds.includes(event.kind);
+    const match_author = authors.length == 0 ? true : authors.includes(event.pubkey);
+    const match_id = ids.length == 0 ? true : ids.includes(event.id);
+    const match_p_tag = ps.length == 0 ? true : ps.includes(event.pubkey);
+    const match_e_tag = es.length == 0 ? true : es.includes(event.id);
+    return (
+        match_kind &&
+        match_author &&
+        match_id &&
+        match_p_tag &&
+        match_e_tag
+    ) ||
+        (kinds.length == 0 && authors.length == 0 && ids.length == 0 &&
+            ps.length == 0 && es.length == 0);
+}
+
+Deno.test("isMatched", async () => {
+    const ctx = InMemoryAccountContext.Generate();
+    const event = await prepareNormalNostrEvent(ctx, {
+        content: "",
+        kind: 1,
+    });
+    const is = isMatched(event, {
+        limit: 1,
+    });
+    assertEquals(is, true);
+});

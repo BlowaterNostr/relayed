@@ -15,10 +15,7 @@ import { interface_GetEventsByAuthors } from "./resolvers/event.ts";
 import Landing from "./routes/landing.tsx";
 import Error404 from "./routes/_404.tsx";
 import { RelayInformation, RelayInformationStore } from "./resolvers/nip11.ts";
-import { DB } from "https://deno.land/x/sqlite/mod.ts";
-
-// Open a database
-const db = new DB("test.db");
+import { func_GetEventsByFilter } from "./resolvers/event.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -97,6 +94,7 @@ export async function run(args: {
             get_events_by_IDs: eventStore.get_events_by_IDs.bind(eventStore),
             get_events_by_kinds: eventStore.get_events_by_kinds.bind(eventStore),
             get_events_by_authors: eventStore.get_events_by_authors.bind(eventStore),
+            get_events_by_filter: eventStore.get_events_by_filter.bind(eventStore),
             policyStore,
             relayInformationStore,
             kv: args.kv,
@@ -123,6 +121,7 @@ export type EventReadWriter = {
     write_event: func_WriteEvent;
     get_events_by_IDs: func_GetEventsByIDs;
     get_events_by_kinds: func_GetEventsByKinds;
+    get_events_by_filter: func_GetEventsByFilter;
 } & interface_GetEventsByAuthors;
 
 const root_handler = (
