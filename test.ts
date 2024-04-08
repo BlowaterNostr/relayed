@@ -15,6 +15,7 @@ import {
 } from "./_libs.ts";
 import {
     limit,
+    newSub_multiple_filters,
     no_event,
 } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/relay-single-test.ts";
 
@@ -37,7 +38,7 @@ Deno.test("main", async (t) => {
         password: "123",
         port: 8080,
         default_policy: {
-            allowed_kinds: "none",
+            allowed_kinds: [NostrKind.Long_Form],
         },
         kv: await test_kv(),
     }) as Relay;
@@ -143,6 +144,7 @@ Deno.test("main", async (t) => {
     await t.step("nip1", async () => {
         await limit(relay.url)();
         await no_event(relay.url)();
+        await newSub_multiple_filters(relay.url)();
     });
 
     await client.close();

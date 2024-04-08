@@ -146,7 +146,7 @@ async function handle_cmd_event(args: {
                         respond_ok(
                             event,
                             false,
-                            "this kind is blocked",
+                            `kind ${event.kind} is blocked`,
                         ),
                     ),
                 );
