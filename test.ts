@@ -13,11 +13,7 @@ import {
     SingleRelayConnection,
     SubscriptionStream,
 } from "./_libs.ts";
-import {
-    limit,
-    newSub_multiple_filters,
-    no_event,
-} from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/relay-single-test.ts";
+import * as client_test from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/relay-single-test.ts";
 
 const test_kv = async () => {
     try {
@@ -38,7 +34,7 @@ Deno.test("main", async (t) => {
         password: "123",
         port: 8080,
         default_policy: {
-            allowed_kinds: [NostrKind.Long_Form],
+            allowed_kinds: [NostrKind.Long_Form, NostrKind.Encrypted_Custom_App_Data],
         },
         kv: await test_kv(),
     }) as Relay;
@@ -141,10 +137,14 @@ Deno.test("main", async (t) => {
         assertIsError(err, Error);
     });
 
-    await t.step("nip1", async () => {
-        await limit(relay.url)();
-        await no_event(relay.url)();
-        await newSub_multiple_filters(relay.url)();
+    await t.step("client_test", async () => {
+        await client_test.limit(relay.url)();
+        await client_test.no_event(relay.url)();
+        await client_test.newSub_multiple_filters(relay.url)();
+        await client_test.two_clients_communicate(relay.url)();
+        await client_test.get_event_by_id(relay.url)();
+        await client_test.close_sub_keep_reading(relay.url)();
+        await client_test.get_correct_kind(relay.url)();
     });
 
     await client.close();
