@@ -137,9 +137,8 @@ Deno.test("main", async (t) => {
         assertIsError(err, Error);
     });
 
-
     await t.step("nip1", async () => {
-        await limit(relay.url)()
+        await limit(relay.url)();
     });
 
     await client.close();
