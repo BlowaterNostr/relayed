@@ -3,11 +3,8 @@ import { SubscriptionMap, ws_handler } from "./ws.ts";
 import { render } from "https://esm.sh/preact-render-to-string@6.4.1";
 import { RootResolver } from "./resolvers/root.ts";
 import * as gql from "https://esm.sh/graphql@16.8.1";
-
 import { Policy } from "./resolvers/policy.ts";
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
-import { func_GetEventsByKinds, func_WriteEvent } from "./resolvers/event.ts";
-import { EventStore, func_GetEventsByIDs } from "./resolvers/event.ts";
 import { NostrEvent, NostrKind, parseJSON, PublicKey, verifyEvent } from "./_libs.ts";
 import { PolicyStore } from "./resolvers/policy.ts";
 import { Policies } from "./resolvers/policy.ts";
@@ -15,7 +12,14 @@ import { interface_GetEventsByAuthors } from "./resolvers/event.ts";
 import Landing from "./routes/landing.tsx";
 import Error404 from "./routes/_404.tsx";
 import { RelayInformation, RelayInformationStore } from "./resolvers/nip11.ts";
-import { func_GetEventsByFilter } from "./resolvers/event.ts";
+import {
+    EventStore,
+    func_GetEventsByFilter,
+    func_GetEventsByIDs,
+    func_GetEventsByKinds,
+    func_MarkEventDeleted,
+    func_WriteEvent,
+} from "./resolvers/event.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -95,6 +99,7 @@ export async function run(args: {
             get_events_by_kinds: eventStore.get_events_by_kinds.bind(eventStore),
             get_events_by_authors: eventStore.get_events_by_authors.bind(eventStore),
             get_events_by_filter: eventStore.get_events_by_filter.bind(eventStore),
+            mark_event_deleted: eventStore.mark_event_deleted,
             policyStore,
             relayInformationStore,
             kv: args.kv,
@@ -122,6 +127,7 @@ export type EventReadWriter = {
     get_events_by_IDs: func_GetEventsByIDs;
     get_events_by_kinds: func_GetEventsByKinds;
     get_events_by_filter: func_GetEventsByFilter;
+    mark_event_deleted: func_MarkEventDeleted;
 } & interface_GetEventsByAuthors;
 
 const root_handler = (

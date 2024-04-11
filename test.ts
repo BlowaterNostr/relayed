@@ -14,6 +14,7 @@ import {
     SubscriptionStream,
 } from "./_libs.ts";
 import * as client_test from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/relay-single-test.ts";
+import * as client_nip9_test from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/nip9-test.ts";
 
 const test_kv = async () => {
     try {
@@ -147,6 +148,24 @@ Deno.test("main", async (t) => {
         await client_test.get_correct_kind(relay.url)();
     });
 
+    await client.close();
+    await relay.shutdown();
+});
+
+// https://github.com/nostr-protocol/nips/blob/master/09.md
+Deno.test("NIP-9: Deletion", async () => {
+    const relay = await run({
+        password: "123",
+        port: 8080,
+        default_policy: {
+            allowed_kinds: "all",
+        },
+        kv: await test_kv(),
+    }) as Relay;
+    const client = SingleRelayConnection.New(relay.url, { log: false });
+    {
+        await client_nip9_test.send_deletion_event(relay.url)();
+    }
     await client.close();
     await relay.shutdown();
 });

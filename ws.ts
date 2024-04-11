@@ -6,6 +6,7 @@ import {
     func_GetEventsByFilter,
     func_GetEventsByIDs,
     func_GetEventsByKinds,
+    func_MarkEventDeleted,
     func_WriteEvent,
 } from "./resolvers/event.ts";
 import {
@@ -16,11 +17,14 @@ import {
     ClientRequest_Event,
     ClientRequest_Message,
     ClientRequest_REQ,
+    getTags,
     NostrEvent,
     NostrFilter,
+    NostrKind,
     PublicKey,
     verifyEvent,
 } from "./_libs.ts";
+import { NoteID } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/nip19.ts";
 
 export const ws_handler = (
     args: {
@@ -111,6 +115,7 @@ async function handle_cmd_event(args: {
     nostr_ws_msg: ClientRequest_Event;
     resolvePolicyByKind: func_ResolvePolicyByKind;
     write_event: func_WriteEvent;
+    mark_event_deleted: func_MarkEventDeleted;
 }) {
     const { this_socket, connections, nostr_ws_msg, resolvePolicyByKind, write_event } = args;
     const event = nostr_ws_msg[1];
@@ -154,6 +159,14 @@ async function handle_cmd_event(args: {
         }
     }
 
+    if (event.kind == NostrKind.DELETE) {
+        for (const e of getTags(event).e) {
+            const ok = await args.mark_event_deleted(NoteID.FromHex(e))
+            if(!ok) {
+                console.error("failed to delete", e)
+            }
+        }
+    }
     const _ok = await write_event(event);
     if (_ok) {
         send(this_socket, JSON.stringify(respond_ok(event, true, "")));
