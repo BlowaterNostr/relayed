@@ -1,3 +1,4 @@
+import { NoteID } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/nip19.ts";
 import {
     InMemoryAccountContext,
     NostrEvent,
@@ -41,6 +42,8 @@ export type func_WriteEvent = (event: NostrEvent) => Promise<boolean>;
 export type interface_WriteEvent = {
     write_event: func_WriteEvent;
 };
+
+export type func_MarkEventDeleted = (event: NostrEvent | NoteID) => Promise<boolean>;
 
 export class EventStore implements EventReadWriter {
     private constructor(
@@ -108,6 +111,20 @@ export class EventStore implements EventReadWriter {
 
         return result.ok;
     }
+
+    mark_event_deleted = async (event_or_id: NostrEvent | NoteID) => {
+        let id: string;
+        if(event_or_id instanceof NoteID) {
+            id = event_or_id.hex
+        } else {
+            id = event_or_id.id
+        }
+        const result = await this.kv.set(["event", "deleted", id], id);
+        if (result.ok) {
+            this.events.delete(id);
+        }
+        return result.ok;
+    };
 }
 
 function isMatched(event: NostrEvent, filter: NostrFilter) {
