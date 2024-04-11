@@ -38,10 +38,9 @@ export type interface_GetEventsByAuthors = {
 
 export type func_GetEventsByFilter = (filter: NostrFilter) => AsyncIterable<NostrEvent>;
 
-export type func_WriteEvent = (event: NostrEvent) => Promise<boolean>;
-export type interface_WriteEvent = {
-    write_event: func_WriteEvent;
-};
+export type func_WriteRegularEvent = (event: NostrEvent) => Promise<boolean>;
+
+export type func_WriteReplaceableEvent = (event: NostrEvent) => Promise<boolean>;
 
 export type func_MarkEventDeleted = (event: NostrEvent | NoteID) => Promise<boolean>;
 
@@ -97,12 +96,33 @@ export class EventStore implements EventReadWriter {
         }
     }
 
-    async write_event(event: NostrEvent) {
+    write_regular_event = async (event: NostrEvent) => {
+        if(isReplaceableEvent(event.kind)) {
+            return false;
+        }
         console.log("write_event", event);
         const result = await this.kv.atomic()
             .set(["event", event.id], event)
             .set(["event", event.kind, event.id], event)
             .set(["event", event.pubkey, event.id], event)
+            .commit();
+
+        if (result.ok) {
+            this.events.set(event.id, event);
+        }
+
+        return result.ok;
+    }
+
+    write_replaceable_event = async (event: NostrEvent) => {
+        const kind = event.kind;
+        if(!isReplaceableEvent(kind)) {
+            return false;
+        }
+        console.log("write_replaceable_event", event);
+        const result = await this.kv.atomic()
+            .set(["event", event.kind, event.pubkey], event)
+            .set(["event", event.pubkey, event.kind], event)
             .commit();
 
         if (result.ok) {
@@ -125,6 +145,10 @@ export class EventStore implements EventReadWriter {
         }
         return result.ok;
     };
+}
+
+function isReplaceableEvent(kind: NostrKind) {
+    return kind == NostrKind.META_DATA || kind == NostrKind.CONTACTS || (10000 <= kind && kind < 20000)
 }
 
 function isMatched(event: NostrEvent, filter: NostrFilter) {

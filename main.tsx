@@ -8,7 +8,7 @@ import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
 import { NostrEvent, NostrKind, parseJSON, PublicKey, verifyEvent } from "./_libs.ts";
 import { PolicyStore } from "./resolvers/policy.ts";
 import { Policies } from "./resolvers/policy.ts";
-import { interface_GetEventsByAuthors } from "./resolvers/event.ts";
+import { func_WriteReplaceableEvent, interface_GetEventsByAuthors } from "./resolvers/event.ts";
 import Landing from "./routes/landing.tsx";
 import Error404 from "./routes/_404.tsx";
 import { RelayInformation, RelayInformationStore } from "./resolvers/nip11.ts";
@@ -18,7 +18,7 @@ import {
     func_GetEventsByIDs,
     func_GetEventsByKinds,
     func_MarkEventDeleted,
-    func_WriteEvent,
+    func_WriteRegularEvent,
 } from "./resolvers/event.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
@@ -94,12 +94,13 @@ export async function run(args: {
             password,
             connections,
             resolvePolicyByKind: policyStore.resolvePolicyByKind,
-            write_event: eventStore.write_event.bind(eventStore),
             get_events_by_IDs: eventStore.get_events_by_IDs.bind(eventStore),
             get_events_by_kinds: eventStore.get_events_by_kinds.bind(eventStore),
             get_events_by_authors: eventStore.get_events_by_authors.bind(eventStore),
             get_events_by_filter: eventStore.get_events_by_filter.bind(eventStore),
             mark_event_deleted: eventStore.mark_event_deleted,
+            write_regular_event: eventStore.write_regular_event.bind(eventStore),
+            write_replaceable_event: eventStore.write_replaceable_event,
             policyStore,
             relayInformationStore,
             kv: args.kv,
@@ -123,7 +124,8 @@ export async function run(args: {
 }
 
 export type EventReadWriter = {
-    write_event: func_WriteEvent;
+    write_regular_event: func_WriteRegularEvent;
+    write_replaceable_event: func_WriteReplaceableEvent
     get_events_by_IDs: func_GetEventsByIDs;
     get_events_by_kinds: func_GetEventsByKinds;
     get_events_by_filter: func_GetEventsByFilter;

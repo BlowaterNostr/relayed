@@ -7,7 +7,8 @@ import {
     func_GetEventsByIDs,
     func_GetEventsByKinds,
     func_MarkEventDeleted,
-    func_WriteEvent,
+    func_WriteRegularEvent,
+    func_WriteReplaceableEvent,
 } from "./resolvers/event.ts";
 import {
     _RelayResponse_EOSE,
@@ -114,17 +115,20 @@ async function handle_cmd_event(args: {
     connections: Map<WebSocket, SubscriptionMap>;
     nostr_ws_msg: ClientRequest_Event;
     resolvePolicyByKind: func_ResolvePolicyByKind;
-    write_event: func_WriteEvent;
+    write_regular_event: func_WriteRegularEvent;
+    write_replaceable_event: func_WriteReplaceableEvent;
     mark_event_deleted: func_MarkEventDeleted;
 }) {
-    const { this_socket, connections, nostr_ws_msg, resolvePolicyByKind, write_event } = args;
+    const { this_socket, connections, nostr_ws_msg, resolvePolicyByKind } = args;
     const event = nostr_ws_msg[1];
-    const ok = await verifyEvent(event);
-    if (!ok) {
-        return send(
-            this_socket,
-            JSON.stringify(respond_ok(event, false, "invalid event")),
-        );
+    {
+        const ok = await verifyEvent(event);
+        if (!ok) {
+            return send(
+                this_socket,
+                JSON.stringify(respond_ok(event, false, "invalid event")),
+            );
+        }
     }
 
     const policy = await resolvePolicyByKind(event.kind);
@@ -167,8 +171,15 @@ async function handle_cmd_event(args: {
             }
         }
     }
-    const _ok = await write_event(event);
-    if (_ok) {
+
+    let ok: boolean;
+    if (event.kind == NostrKind.META_DATA || event.kind == NostrKind.CONTACTS || (10000 <= event.kind && event.kind < 20000)) {
+        ok = await args.write_replaceable_event(event)
+    } else {
+        ok = await args.write_regular_event(event);
+    }
+    
+    if (ok) {
         send(this_socket, JSON.stringify(respond_ok(event, true, "")));
     } else {
         send(this_socket, JSON.stringify(respond_ok(event, false, "")));
