@@ -5,10 +5,14 @@ import { RootResolver } from "./resolvers/root.ts";
 import * as gql from "https://esm.sh/graphql@16.8.1";
 import { Policy } from "./resolvers/policy.ts";
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
-import { NostrEvent, NostrKind, parseJSON, PublicKey, verifyEvent } from "./_libs.ts";
+import { NostrKind, PublicKey } from "./_libs.ts";
 import { PolicyStore } from "./resolvers/policy.ts";
 import { Policies } from "./resolvers/policy.ts";
-import { interface_GetEventsByAuthors } from "./resolvers/event.ts";
+import {
+    func_GetReplaceableEvents,
+    func_WriteReplaceableEvent,
+    interface_GetEventsByAuthors,
+} from "./resolvers/event.ts";
 import Landing from "./routes/landing.tsx";
 import Error404 from "./routes/_404.tsx";
 import { RelayInformation, RelayInformationStore } from "./resolvers/nip11.ts";
@@ -18,7 +22,7 @@ import {
     func_GetEventsByIDs,
     func_GetEventsByKinds,
     func_MarkEventDeleted,
-    func_WriteEvent,
+    func_WriteRegularEvent,
 } from "./resolvers/event.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
@@ -94,12 +98,14 @@ export async function run(args: {
             password,
             connections,
             resolvePolicyByKind: policyStore.resolvePolicyByKind,
-            write_event: eventStore.write_event.bind(eventStore),
             get_events_by_IDs: eventStore.get_events_by_IDs.bind(eventStore),
             get_events_by_kinds: eventStore.get_events_by_kinds.bind(eventStore),
             get_events_by_authors: eventStore.get_events_by_authors.bind(eventStore),
             get_events_by_filter: eventStore.get_events_by_filter.bind(eventStore),
+            get_replaceable_events: eventStore.get_replaceable_events.bind(eventStore),
             mark_event_deleted: eventStore.mark_event_deleted,
+            write_regular_event: eventStore.write_regular_event.bind(eventStore),
+            write_replaceable_event: eventStore.write_replaceable_event,
             policyStore,
             relayInformationStore,
             kv: args.kv,
@@ -123,11 +129,13 @@ export async function run(args: {
 }
 
 export type EventReadWriter = {
-    write_event: func_WriteEvent;
+    write_regular_event: func_WriteRegularEvent;
+    write_replaceable_event: func_WriteReplaceableEvent;
     get_events_by_IDs: func_GetEventsByIDs;
     get_events_by_kinds: func_GetEventsByKinds;
     get_events_by_filter: func_GetEventsByFilter;
     mark_event_deleted: func_MarkEventDeleted;
+    get_replaceable_events: func_GetReplaceableEvents;
 } & interface_GetEventsByAuthors;
 
 const root_handler = (
@@ -177,23 +185,9 @@ async (req: Request) => {
     const { password, policyStore } = args;
     if (req.method == "POST") {
         const query = await req.json();
-        const nip42 = req.headers.get("nip42");
-        console.log("nip42 header", nip42);
-
         const pw = req.headers.get("password");
         if (pw != password) {
             return new Response(`{"errors":"incorrect password"}`);
-        }
-
-        if (nip42) {
-            const auth_event = parseJSON<NostrEvent>(nip42);
-            if (auth_event instanceof Error) {
-                return new Response(`{errors:["no auth"]}`);
-            }
-            const ok = await verifyEvent(auth_event);
-            if (!ok) {
-                return new Response(`{"errors":["no auth"]}`);
-            }
         }
         const result = await gql.graphql({
             schema: schema,
@@ -201,7 +195,6 @@ async (req: Request) => {
             variableValues: query.variables,
             rootValue: RootResolver(args),
         });
-        console.log(result);
         return new Response(JSON.stringify(result));
     } else if (req.method == "GET") {
         const res = new Response(graphiql);

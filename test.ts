@@ -152,6 +152,24 @@ Deno.test("main", async (t) => {
     await relay.shutdown();
 });
 
+// https://github.com/nostr-protocol/nips/blob/master/01.md#kinds
+Deno.test("replaceable events", async (t) => {
+    const relay = await run({
+        password: "123",
+        port: 8080,
+        default_policy: {
+            allowed_kinds: "all",
+        },
+        kv: await test_kv(),
+    }) as Relay;
+    const client = SingleRelayConnection.New(relay.url, { log: false });
+    await t.step("get_replaceable_event", async () => {
+        await client_test.get_replaceable_event(relay.url)();
+    });
+    await client.close();
+    await relay.shutdown();
+});
+
 // https://github.com/nostr-protocol/nips/blob/master/09.md
 Deno.test("NIP-9: Deletion", async () => {
     const relay = await run({
@@ -164,7 +182,7 @@ Deno.test("NIP-9: Deletion", async () => {
     }) as Relay;
     const client = SingleRelayConnection.New(relay.url, { log: false });
     {
-        await client_nip9_test.send_deletion_event(relay.url)();
+        await client_nip9_test.store_deletion_event(relay.url)();
     }
     await client.close();
     await relay.shutdown();
@@ -186,8 +204,6 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
 
     await t.step("get relay information", async () => {
         const information = await relay.get_relay_information();
-        console.log(`information`, information);
-
         assertEquals(information, { name: "Nostr Relay", ...not_modifiable_information });
     });
 

@@ -2,12 +2,10 @@
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
 import { DefaultPolicy, EventReadWriter } from "./main.tsx";
 import {
-    func_GetEventsByAuthors,
-    func_GetEventsByFilter,
-    func_GetEventsByIDs,
-    func_GetEventsByKinds,
     func_MarkEventDeleted,
-    func_WriteEvent,
+    func_WriteRegularEvent,
+    func_WriteReplaceableEvent,
+    isReplaceableEvent,
 } from "./resolvers/event.ts";
 import {
     _RelayResponse_EOSE,
@@ -114,17 +112,20 @@ async function handle_cmd_event(args: {
     connections: Map<WebSocket, SubscriptionMap>;
     nostr_ws_msg: ClientRequest_Event;
     resolvePolicyByKind: func_ResolvePolicyByKind;
-    write_event: func_WriteEvent;
+    write_regular_event: func_WriteRegularEvent;
+    write_replaceable_event: func_WriteReplaceableEvent;
     mark_event_deleted: func_MarkEventDeleted;
 }) {
-    const { this_socket, connections, nostr_ws_msg, resolvePolicyByKind, write_event } = args;
+    const { this_socket, connections, nostr_ws_msg, resolvePolicyByKind } = args;
     const event = nostr_ws_msg[1];
-    const ok = await verifyEvent(event);
-    if (!ok) {
-        return send(
-            this_socket,
-            JSON.stringify(respond_ok(event, false, "invalid event")),
-        );
+    {
+        const ok = await verifyEvent(event);
+        if (!ok) {
+            return send(
+                this_socket,
+                JSON.stringify(respond_ok(event, false, "invalid event")),
+            );
+        }
     }
 
     const policy = await resolvePolicyByKind(event.kind);
@@ -161,14 +162,24 @@ async function handle_cmd_event(args: {
 
     if (event.kind == NostrKind.DELETE) {
         for (const e of getTags(event).e) {
-            const ok = await args.mark_event_deleted(NoteID.FromHex(e))
-            if(!ok) {
-                console.error("failed to delete", e)
+            const ok = await args.mark_event_deleted(NoteID.FromHex(e));
+            if (!ok) {
+                console.error("failed to delete", e);
             }
         }
     }
-    const _ok = await write_event(event);
-    if (_ok) {
+
+    let ok: boolean;
+    if (
+        event.kind == NostrKind.META_DATA || event.kind == NostrKind.CONTACTS ||
+        (10000 <= event.kind && event.kind < 20000)
+    ) {
+        ok = await args.write_replaceable_event(event);
+    } else {
+        ok = await args.write_regular_event(event);
+    }
+
+    if (ok) {
         send(this_socket, JSON.stringify(respond_ok(event, true, "")));
     } else {
         send(this_socket, JSON.stringify(respond_ok(event, false, "")));
@@ -220,16 +231,31 @@ async function handle_cmd_req(
     return send(this_socket, JSON.stringify(respond_eose(sub_id)));
 }
 
-async function handle_filter(args: {
-    filter: NostrFilter;
-    get_events_by_IDs: func_GetEventsByIDs;
-    get_events_by_kinds: func_GetEventsByKinds;
-    get_events_by_authors: func_GetEventsByAuthors;
-    get_events_by_filter: func_GetEventsByFilter;
-    resolvePolicyByKind: func_ResolvePolicyByKind;
-}) {
+async function handle_filter(
+    args: {
+        filter: NostrFilter;
+        resolvePolicyByKind: func_ResolvePolicyByKind;
+    } & EventReadWriter,
+) {
     const event_candidates = new Map<string, NostrEvent>();
     const { filter, get_events_by_IDs, resolvePolicyByKind, get_events_by_kinds } = args;
+
+    if (filter.kinds) {
+        const replaceable_kinds: NostrKind[] = [];
+        for (const kind of filter.kinds) {
+            if (isReplaceableEvent(kind)) {
+                replaceable_kinds.push(kind);
+            }
+        }
+        const events = args.get_replaceable_events({
+            authors: filter.authors || [],
+            kinds: replaceable_kinds,
+        });
+        for await (const event of events) {
+            event_candidates.set(event.id, event);
+        }
+    }
+
     if (filter.ids) {
         const events = get_events_by_IDs(new Set(filter.ids));
         for await (const event of events) {

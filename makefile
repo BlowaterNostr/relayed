@@ -6,5 +6,4 @@ fmt:
 
 test: fmt
 	deno test --allow-net --unstable --allow-read --allow-write \
-		--filter main \
 		--coverage test.ts
