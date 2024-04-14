@@ -5,10 +5,14 @@ import { RootResolver } from "./resolvers/root.ts";
 import * as gql from "https://esm.sh/graphql@16.8.1";
 import { Policy } from "./resolvers/policy.ts";
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
-import { NostrEvent, NostrKind, parseJSON, PublicKey, verifyEvent } from "./_libs.ts";
+import { NostrKind, PublicKey } from "./_libs.ts";
 import { PolicyStore } from "./resolvers/policy.ts";
 import { Policies } from "./resolvers/policy.ts";
-import { func_WriteReplaceableEvent, interface_GetEventsByAuthors } from "./resolvers/event.ts";
+import {
+    func_GetReplaceableEvents,
+    func_WriteReplaceableEvent,
+    interface_GetEventsByAuthors,
+} from "./resolvers/event.ts";
 import Landing from "./routes/landing.tsx";
 import Error404 from "./routes/_404.tsx";
 import { RelayInformation, RelayInformationStore } from "./resolvers/nip11.ts";
@@ -98,6 +102,7 @@ export async function run(args: {
             get_events_by_kinds: eventStore.get_events_by_kinds.bind(eventStore),
             get_events_by_authors: eventStore.get_events_by_authors.bind(eventStore),
             get_events_by_filter: eventStore.get_events_by_filter.bind(eventStore),
+            get_replaceable_events: eventStore.get_replaceable_events.bind(eventStore),
             mark_event_deleted: eventStore.mark_event_deleted,
             write_regular_event: eventStore.write_regular_event.bind(eventStore),
             write_replaceable_event: eventStore.write_replaceable_event,
@@ -130,6 +135,7 @@ export type EventReadWriter = {
     get_events_by_kinds: func_GetEventsByKinds;
     get_events_by_filter: func_GetEventsByFilter;
     mark_event_deleted: func_MarkEventDeleted;
+    get_replaceable_events: func_GetReplaceableEvents;
 } & interface_GetEventsByAuthors;
 
 const root_handler = (

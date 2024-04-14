@@ -41,6 +41,10 @@ export type func_GetEventsByFilter = (filter: NostrFilter) => AsyncIterable<Nost
 export type func_WriteRegularEvent = (event: NostrEvent) => Promise<boolean>;
 
 export type func_WriteReplaceableEvent = (event: NostrEvent) => Promise<boolean>;
+export type func_GetReplaceableEvents = (args: {
+    kinds: NostrKind[];
+    authors: string[];
+}) => AsyncIterable<NostrEvent>;
 
 export type func_MarkEventDeleted = (event: NostrEvent | NoteID) => Promise<boolean>;
 
@@ -96,6 +100,24 @@ export class EventStore implements EventReadWriter {
         }
     }
 
+    async *get_replaceable_events(args: {
+        kinds: NostrKind[];
+        authors: string[];
+    }) {
+        const keys: Deno.KvKey[] = [];
+        for (const kind of args.kinds) {
+            for (const author of args.authors) {
+                keys.push(["event", kind, author]);
+            }
+        }
+        const results = await this.kv.getMany<NostrEvent[]>(keys);
+        for (const result of results) {
+            if (result.value) {
+                yield result.value;
+            }
+        }
+    }
+
     write_regular_event = async (event: NostrEvent) => {
         if (isReplaceableEvent(event.kind)) {
             return false;
@@ -147,7 +169,7 @@ export class EventStore implements EventReadWriter {
     };
 }
 
-function isReplaceableEvent(kind: NostrKind) {
+export function isReplaceableEvent(kind: NostrKind) {
     return kind == NostrKind.META_DATA || kind == NostrKind.CONTACTS || (10000 <= kind && kind < 20000);
 }
 

@@ -2,13 +2,10 @@
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
 import { DefaultPolicy, EventReadWriter } from "./main.tsx";
 import {
-    func_GetEventsByAuthors,
-    func_GetEventsByFilter,
-    func_GetEventsByIDs,
-    func_GetEventsByKinds,
     func_MarkEventDeleted,
     func_WriteRegularEvent,
     func_WriteReplaceableEvent,
+    isReplaceableEvent,
 } from "./resolvers/event.ts";
 import {
     _RelayResponse_EOSE,
@@ -234,16 +231,30 @@ async function handle_cmd_req(
     return send(this_socket, JSON.stringify(respond_eose(sub_id)));
 }
 
-async function handle_filter(args: {
-    filter: NostrFilter;
-    get_events_by_IDs: func_GetEventsByIDs;
-    get_events_by_kinds: func_GetEventsByKinds;
-    get_events_by_authors: func_GetEventsByAuthors;
-    get_events_by_filter: func_GetEventsByFilter;
-    resolvePolicyByKind: func_ResolvePolicyByKind;
-}) {
+async function handle_filter(
+    args: {
+        filter: NostrFilter;
+        resolvePolicyByKind: func_ResolvePolicyByKind;
+    } & EventReadWriter,
+) {
     const event_candidates = new Map<string, NostrEvent>();
     const { filter, get_events_by_IDs, resolvePolicyByKind, get_events_by_kinds } = args;
+
+    if (filter.kinds) {
+        const replaceable_kinds: NostrKind[] = [];
+        for (const kind of filter.kinds) {
+            if (isReplaceableEvent(kind)) {
+                replaceable_kinds.push(kind);
+            }
+        }
+        const events = args.get_replaceable_events({
+            authors: filter.authors || [],
+            kinds: replaceable_kinds,
+        });
+        for await (const event of events) {
+            event_candidates.set(event.id, event);
+        }
+    }
 
     if (filter.ids) {
         const events = get_events_by_IDs(new Set(filter.ids));
