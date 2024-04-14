@@ -125,7 +125,7 @@ export async function run(args: {
 
 export type EventReadWriter = {
     write_regular_event: func_WriteRegularEvent;
-    write_replaceable_event: func_WriteReplaceableEvent
+    write_replaceable_event: func_WriteReplaceableEvent;
     get_events_by_IDs: func_GetEventsByIDs;
     get_events_by_kinds: func_GetEventsByKinds;
     get_events_by_filter: func_GetEventsByFilter;
@@ -179,23 +179,9 @@ async (req: Request) => {
     const { password, policyStore } = args;
     if (req.method == "POST") {
         const query = await req.json();
-        const nip42 = req.headers.get("nip42");
-        console.log("nip42 header", nip42);
-
         const pw = req.headers.get("password");
         if (pw != password) {
             return new Response(`{"errors":"incorrect password"}`);
-        }
-
-        if (nip42) {
-            const auth_event = parseJSON<NostrEvent>(nip42);
-            if (auth_event instanceof Error) {
-                return new Response(`{errors:["no auth"]}`);
-            }
-            const ok = await verifyEvent(auth_event);
-            if (!ok) {
-                return new Response(`{"errors":["no auth"]}`);
-            }
         }
         const result = await gql.graphql({
             schema: schema,
@@ -203,7 +189,6 @@ async (req: Request) => {
             variableValues: query.variables,
             rootValue: RootResolver(args),
         });
-        console.log(result);
         return new Response(JSON.stringify(result));
     } else if (req.method == "GET") {
         const res = new Response(graphiql);

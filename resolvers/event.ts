@@ -97,7 +97,7 @@ export class EventStore implements EventReadWriter {
     }
 
     write_regular_event = async (event: NostrEvent) => {
-        if(isReplaceableEvent(event.kind)) {
+        if (isReplaceableEvent(event.kind)) {
             return false;
         }
         console.log("write_event", event);
@@ -112,11 +112,11 @@ export class EventStore implements EventReadWriter {
         }
 
         return result.ok;
-    }
+    };
 
     write_replaceable_event = async (event: NostrEvent) => {
         const kind = event.kind;
-        if(!isReplaceableEvent(kind)) {
+        if (!isReplaceableEvent(kind)) {
             return false;
         }
         console.log("write_replaceable_event", event);
@@ -130,14 +130,14 @@ export class EventStore implements EventReadWriter {
         }
 
         return result.ok;
-    }
+    };
 
     mark_event_deleted = async (event_or_id: NostrEvent | NoteID) => {
         let id: string;
-        if(event_or_id instanceof NoteID) {
-            id = event_or_id.hex
+        if (event_or_id instanceof NoteID) {
+            id = event_or_id.hex;
         } else {
-            id = event_or_id.id
+            id = event_or_id.id;
         }
         const result = await this.kv.set(["event", "deleted", id], id);
         if (result.ok) {
@@ -148,7 +148,7 @@ export class EventStore implements EventReadWriter {
 }
 
 function isReplaceableEvent(kind: NostrKind) {
-    return kind == NostrKind.META_DATA || kind == NostrKind.CONTACTS || (10000 <= kind && kind < 20000)
+    return kind == NostrKind.META_DATA || kind == NostrKind.CONTACTS || (10000 <= kind && kind < 20000);
 }
 
 function isMatched(event: NostrEvent, filter: NostrFilter) {

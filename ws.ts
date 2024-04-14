@@ -165,20 +165,23 @@ async function handle_cmd_event(args: {
 
     if (event.kind == NostrKind.DELETE) {
         for (const e of getTags(event).e) {
-            const ok = await args.mark_event_deleted(NoteID.FromHex(e))
-            if(!ok) {
-                console.error("failed to delete", e)
+            const ok = await args.mark_event_deleted(NoteID.FromHex(e));
+            if (!ok) {
+                console.error("failed to delete", e);
             }
         }
     }
 
     let ok: boolean;
-    if (event.kind == NostrKind.META_DATA || event.kind == NostrKind.CONTACTS || (10000 <= event.kind && event.kind < 20000)) {
-        ok = await args.write_replaceable_event(event)
+    if (
+        event.kind == NostrKind.META_DATA || event.kind == NostrKind.CONTACTS ||
+        (10000 <= event.kind && event.kind < 20000)
+    ) {
+        ok = await args.write_replaceable_event(event);
     } else {
         ok = await args.write_regular_event(event);
     }
-    
+
     if (ok) {
         send(this_socket, JSON.stringify(respond_ok(event, true, "")));
     } else {
@@ -241,6 +244,7 @@ async function handle_filter(args: {
 }) {
     const event_candidates = new Map<string, NostrEvent>();
     const { filter, get_events_by_IDs, resolvePolicyByKind, get_events_by_kinds } = args;
+
     if (filter.ids) {
         const events = get_events_by_IDs(new Set(filter.ids));
         for await (const event of events) {
