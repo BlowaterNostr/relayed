@@ -154,6 +154,12 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
     console.log(info.remoteAddr);
 
     const { pathname, protocol } = new URL(req.url);
+    if (pathname === "/api/auth/login") {
+        const auth = req.headers.get("authorization");
+        const resp = new Response("ok");
+        resp.headers.set("set-cookie", `token=${auth}; Path=/; Secure; HttpOnly; SameSite=Strict;`);
+        return resp;
+    }
     if (pathname == "/api") {
         return graphql_handler(args)(req);
     }
@@ -182,20 +188,33 @@ const graphql_handler = (
     },
 ) =>
 async (req: Request) => {
-    const { password, policyStore } = args;
+    const { password, policyStore, relayInformationStore } = args;
     if (req.method == "POST") {
         const query = await req.json();
-        const pw = req.headers.get("password");
-        if (pw != password) {
-            return new Response(`{"errors":"incorrect password"}`);
+        const cookie = req.headers.get("cookie");
+        const token = cookie?.split(";").find((c) => c.includes("token"))?.split("=")[1].split(" ")[1];
+        const event = token ? JSON.parse(atob(token)) : undefined;
+        if (event) {
+            const pubkey = await relayInformationStore.resolveRelayInformation().then((info) => info.pubkey);
+            if (!pubkey) {
+                return new Response(`{"errors":"relay pubkey not set"}`);
+            }
+            const relayPubkey = PublicKey.FromString(pubkey);
+            if (relayPubkey instanceof Error) {
+                return new Response(`{"errors":"relay pubkey not valid"}`);
+            }
+            if (event.pubkey != relayPubkey.hex) {
+                return new Response(`{"errors":"you are not admin"}`);
+            }
+            const result = await gql.graphql({
+                schema: schema,
+                source: query.query,
+                variableValues: query.variables,
+                rootValue: RootResolver(args),
+            });
+            return new Response(JSON.stringify(result));
         }
-        const result = await gql.graphql({
-            schema: schema,
-            source: query.query,
-            variableValues: query.variables,
-            rootValue: RootResolver(args),
-        });
-        return new Response(JSON.stringify(result));
+        return new Response(`{"errors":"invalid token"}`);
     } else if (req.method == "GET") {
         const res = new Response(graphiql);
         res.headers.set("content-type", "html");
@@ -293,6 +312,7 @@ const graphiql = `
   </head>
 
   <body>
+    <button id="nip7">Login with NIP-07 extensions</button>
     <div id="graphiql">Loading...</div>
     <script>
       const root = ReactDOM.createRoot(document.getElementById('graphiql'));
@@ -307,6 +327,33 @@ const graphiql = `
           plugins: [explorerPlugin],
         }),
       );
+      const nip7 = document.getElementById('nip7');
+        nip7.onclick = async () => {
+            if ("nostr" in window) {
+                try {
+                    const ext = window.nostr;
+                    const pubkey = await ext.getPublicKey();
+                    const unsigned_event = {
+                        pubkey,
+                        content: "",
+                        created_at: Math.floor(Date.now() / 1000),
+                        kind: 27235,
+                        tags: [],
+                    }
+                    const event = await ext.signEvent(unsigned_event);
+                    fetch('/api/auth/login', {
+                        headers: {
+                            authorization: "Nostr " + btoa(JSON.stringify(event)),
+                        },
+                        credentials: 'include'
+                    })
+                } catch (e) {
+                    console.error(e);
+                }
+            } else {
+                alert("Nostr extension not found");
+            }
+        };
     </script>
   </body>
 </html>`;
