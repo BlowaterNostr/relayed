@@ -5,7 +5,7 @@ import { RootResolver } from "./resolvers/root.ts";
 import * as gql from "https://esm.sh/graphql@16.8.1";
 import { Policy } from "./resolvers/policy.ts";
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
-import { NostrKind, PublicKey } from "./_libs.ts";
+import { NostrKind, PublicKey, verifyEvent } from "./_libs.ts";
 import { PolicyStore } from "./resolvers/policy.ts";
 import { Policies } from "./resolvers/policy.ts";
 import {
@@ -188,33 +188,43 @@ const graphql_handler = (
     },
 ) =>
 async (req: Request) => {
-    const { password, policyStore, relayInformationStore } = args;
+    const { relayInformationStore } = args;
     if (req.method == "POST") {
-        const query = await req.json();
-        const cookie = req.headers.get("cookie");
-        const token = cookie?.split(";").find((c) => c.includes("token"))?.split("=")[1].split(" ")[1];
-        const event = token ? JSON.parse(atob(token)) : undefined;
-        if (event) {
-            const pubkey = await relayInformationStore.resolveRelayInformation().then((info) => info.pubkey);
-            if (!pubkey) {
-                return new Response(`{"errors":"relay pubkey not set"}`);
+        try {
+            const query = await req.json();
+            const cookie = req.headers.get("cookie");
+            const token = cookie?.split(";").find((c) => c.includes("token"))?.split("=")[1].split(" ")[1];
+            const event = token ? JSON.parse(atob(token)) : undefined;
+            if (event) {
+                const verifyResult = await verifyEvent(event);
+                if (!verifyResult) {
+                    return new Response(`{"errors":"token not verified"}`);
+                }
+                const pubkey = await relayInformationStore.resolveRelayInformation().then((info) =>
+                    info.pubkey
+                );
+                if (!pubkey) {
+                    return new Response(`{"errors":"relay pubkey not set"}`);
+                }
+                const relayPubkey = PublicKey.FromString(pubkey);
+                if (relayPubkey instanceof Error) {
+                    return new Response(`{"errors":"relay pubkey not valid"}`);
+                }
+                if (event.pubkey != relayPubkey.hex) {
+                    return new Response(`{"errors":"you are not admin"}`);
+                }
+                const result = await gql.graphql({
+                    schema: schema,
+                    source: query.query,
+                    variableValues: query.variables,
+                    rootValue: RootResolver(args),
+                });
+                return new Response(JSON.stringify(result));
             }
-            const relayPubkey = PublicKey.FromString(pubkey);
-            if (relayPubkey instanceof Error) {
-                return new Response(`{"errors":"relay pubkey not valid"}`);
-            }
-            if (event.pubkey != relayPubkey.hex) {
-                return new Response(`{"errors":"you are not admin"}`);
-            }
-            const result = await gql.graphql({
-                schema: schema,
-                source: query.query,
-                variableValues: query.variables,
-                rootValue: RootResolver(args),
-            });
-            return new Response(JSON.stringify(result));
+            return new Response(`{"errors":"please login first"}`);
+        } catch (error) {
+            return new Response(`{"errors":"${error}"}`);
         }
-        return new Response(`{"errors":"invalid token"}`);
     } else if (req.method == "GET") {
         const res = new Response(graphiql);
         res.headers.set("content-type", "html");
