@@ -171,7 +171,7 @@ Deno.test("replaceable events", async (t) => {
 });
 
 // https://github.com/nostr-protocol/nips/blob/master/09.md
-Deno.test.ignore("NIP-9: Deletion", async () => {
+Deno.test("NIP-9: Deletion", async () => {
     const relay = await run({
         password: "123",
         port: 8080,

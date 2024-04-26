@@ -197,7 +197,6 @@ const graphql_handler = (
     },
 ) =>
 async (req: Request) => {
-    const { relayInformationStore } = args;
     if (req.method == "POST") {
         try {
             const query = await req.json();
@@ -211,7 +210,7 @@ async (req: Request) => {
                     if (!await verifyEvent(event)) {
                         return new Response(`{"errors":"token not verified"}`);
                     }
-                    const { pubkey } = await relayInformationStore.resolveRelayInformation();
+                    const { pubkey } = await args.relayInformationStore.resolveRelayInformation();
                     if (!pubkey) {
                         return new Response(`{"errors":"relay pubkey not set"}`);
                     }
