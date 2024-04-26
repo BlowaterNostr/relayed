@@ -34,7 +34,7 @@ export type DefaultPolicy = {
 export type Relay = {
     server: Deno.HttpServer;
     url: string;
-    password: string;
+    password?: string;
     shutdown: () => Promise<void>;
     set_policy: (args: {
         kind: NostrKind;
@@ -57,13 +57,6 @@ export async function run(args: {
     kv?: Deno.Kv;
 }): Promise<Error | Relay> {
     const connections = new Map<WebSocket, SubscriptionMap>();
-    let { password } = args;
-    if (password == undefined) {
-        password = Deno.env.get("relayed_pw");
-        if (!password) {
-            return new Error("password is not set, please set env var $relayed_pw");
-        }
-    }
     if (args.kv == undefined) {
         args.kv = await Deno.openKv();
     }
@@ -81,6 +74,22 @@ export async function run(args: {
         args.kv,
         default_information,
     );
+
+    let { password } = args;
+    if (!password) {
+        const { pubkey } = await relayInformationStore.resolveRelayInformation();
+        if (!pubkey) {
+            const env_pubkey = Deno.env.get("relayed_pubkey");
+            if (!env_pubkey) {
+                password = Deno.env.get("relayed_pw");
+                if (!password) {
+                    return new Error(
+                        "password or pubkey is not set, please set env var $relayed_pw or $relayed_pubkey",
+                    );
+                }
+            }
+        }
+    }
 
     const eventStore = await EventStore.New(args.kv);
 
@@ -140,7 +149,7 @@ export type EventReadWriter = {
 
 const root_handler = (
     args: {
-        password: string;
+        password?: string;
         information?: RelayInformation;
         connections: Map<WebSocket, SubscriptionMap>;
         default_policy: DefaultPolicy;
@@ -181,7 +190,7 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
 
 const graphql_handler = (
     args: {
-        password: string;
+        password?: string;
         kv: Deno.Kv;
         policyStore: PolicyStore;
         relayInformationStore: RelayInformationStore;
@@ -192,26 +201,40 @@ async (req: Request) => {
     if (req.method == "POST") {
         try {
             const query = await req.json();
-            const cookie = req.headers.get("cookie");
-            const token = cookie?.split(";").find((c) => c.includes("token"))?.split("=")[1].split(" ")[1];
-            const event = token ? JSON.parse(atob(token)) : undefined;
-            if (event) {
-                const verifyResult = await verifyEvent(event);
-                if (!verifyResult) {
-                    return new Response(`{"errors":"token not verified"}`);
+            if (!args.password) {
+                const cookie = req.headers.get("cookie");
+                const token = cookie?.split(";").find((c) => c.includes("token"))?.split("=")[1].split(
+                    " ",
+                )[1];
+                const event = token ? JSON.parse(atob(token)) : undefined;
+                if (event) {
+                    if (!await verifyEvent(event)) {
+                        return new Response(`{"errors":"token not verified"}`);
+                    }
+                    const { pubkey } = await relayInformationStore.resolveRelayInformation();
+                    if (!pubkey) {
+                        return new Response(`{"errors":"relay pubkey not set"}`);
+                    }
+                    const relayPubkey = PublicKey.FromString(pubkey);
+                    if (relayPubkey instanceof Error) {
+                        return new Response(`{"errors":"relay pubkey not valid"}`);
+                    }
+                    if (event.pubkey != relayPubkey.hex) {
+                        return new Response(`{"errors":"you are not admin"}`);
+                    }
+                    const result = await gql.graphql({
+                        schema: schema,
+                        source: query.query,
+                        variableValues: query.variables,
+                        rootValue: RootResolver(args),
+                    });
+                    return new Response(JSON.stringify(result));
                 }
-                const pubkey = await relayInformationStore.resolveRelayInformation().then((info) =>
-                    info.pubkey
-                );
-                if (!pubkey) {
-                    return new Response(`{"errors":"relay pubkey not set"}`);
-                }
-                const relayPubkey = PublicKey.FromString(pubkey);
-                if (relayPubkey instanceof Error) {
-                    return new Response(`{"errors":"relay pubkey not valid"}`);
-                }
-                if (event.pubkey != relayPubkey.hex) {
-                    return new Response(`{"errors":"you are not admin"}`);
+                return new Response(`{"errors":"please login first"}`);
+            } else {
+                const password = req.headers.get("password");
+                if (password != args.password) {
+                    return new Response(`{"errors":"password not correct"}`);
                 }
                 const result = await gql.graphql({
                     schema: schema,
@@ -221,7 +244,6 @@ async (req: Request) => {
                 });
                 return new Response(JSON.stringify(result));
             }
-            return new Response(`{"errors":"please login first"}`);
         } catch (error) {
             return new Response(`{"errors":"${error}"}`);
         }
