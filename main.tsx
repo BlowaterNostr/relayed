@@ -24,6 +24,7 @@ import {
     func_MarkEventDeleted,
     func_WriteRegularEvent,
 } from "./resolvers/event.ts";
+import { getCookies } from "https://deno.land/std@0.224.0/http/cookie.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -147,6 +148,72 @@ export type EventReadWriter = {
     get_replaceable_events: func_GetReplaceableEvents;
 } & interface_GetEventsByAuthors;
 
+async function vertifyToken(token: string | null, relayInformationStore: RelayInformationStore) {
+    try {
+        if (!token) {
+            return {
+                success: false,
+                error: "token not found",
+            }
+        }
+        const [prefix, eventBase64] = token.split(" ");
+        if(prefix !== "Nostr") {
+            return {
+                success: false,
+                error: "token not Nostr",
+            }
+        }
+        const event = JSON.parse(atob(eventBase64));
+        if (!event) {
+            return {
+                success: false,
+                error: "no auth event",
+            }
+        }
+        if (!await verifyEvent(event)) {
+            return {
+                success: false,
+                error: "token not verified",
+            }
+        }
+        const { pubkey: relayPubkey } = await relayInformationStore.resolveRelayInformation();
+        if (!relayPubkey) {
+            return {
+                success: false,
+                error: "relay pubkey not set",
+            }
+        }
+        const relayPubkeyObj = PublicKey.FromString(relayPubkey);
+        if (relayPubkeyObj instanceof Error) {
+            return {
+                success: false,
+                error: "relay pubkey not valid",
+            }
+        }
+        const pubkey = PublicKey.FromString(event.pubkey);
+        if (pubkey instanceof Error) {
+            return {
+                success: false,
+                error: "pubkey not valid",
+            }
+        }
+        if (pubkey.hex !== relayPubkeyObj.hex) {
+            return {
+                success: false,
+                error: "you are not admin",
+            }
+        }
+        return {
+            success: true,
+        }
+    } catch (error) {
+        return {
+            success: false,
+            error: error.toString(),
+        }
+    }
+}
+
 const root_handler = (
     args: {
         password?: string;
@@ -165,7 +232,8 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
     const { pathname, protocol } = new URL(req.url);
     if (pathname === "/api/auth/login") {
         const auth = req.headers.get("authorization");
-        const resp = new Response("ok");
+        const body = await vertifyToken(auth, args.relayInformationStore)
+        const resp = new Response(JSON.stringify(body), { status: 200 });
         resp.headers.set("set-cookie", `token=${auth}; Path=/; Secure; HttpOnly; SameSite=Strict;`);
         return resp;
     }
@@ -201,48 +269,25 @@ async (req: Request) => {
         try {
             const query = await req.json();
             if (!args.password) {
-                const cookie = req.headers.get("cookie");
-                const token = cookie?.split(";").find((c) => c.includes("token"))?.split("=")[1].split(
-                    " ",
-                )[1];
-                const event = token ? JSON.parse(atob(token)) : undefined;
-                if (event) {
-                    if (!await verifyEvent(event)) {
-                        return new Response(`{"errors":"token not verified"}`);
-                    }
-                    const { pubkey } = await args.relayInformationStore.resolveRelayInformation();
-                    if (!pubkey) {
-                        return new Response(`{"errors":"relay pubkey not set"}`);
-                    }
-                    const relayPubkey = PublicKey.FromString(pubkey);
-                    if (relayPubkey instanceof Error) {
-                        return new Response(`{"errors":"relay pubkey not valid"}`);
-                    }
-                    if (event.pubkey != relayPubkey.hex) {
-                        return new Response(`{"errors":"you are not admin"}`);
-                    }
-                    const result = await gql.graphql({
-                        schema: schema,
-                        source: query.query,
-                        variableValues: query.variables,
-                        rootValue: RootResolver(args),
-                    });
-                    return new Response(JSON.stringify(result));
+                const cookies = getCookies(req.headers);
+                const token = cookies.token;
+                const body = await vertifyToken(token, args.relayInformationStore)
+                if (!body.success) {
+                    return new Response(JSON.stringify(body), { status: 200 });
                 }
-                return new Response(`{"errors":"please login first"}`);
             } else {
                 const password = req.headers.get("password");
                 if (password != args.password) {
                     return new Response(`{"errors":"password not correct"}`);
                 }
-                const result = await gql.graphql({
-                    schema: schema,
-                    source: query.query,
-                    variableValues: query.variables,
-                    rootValue: RootResolver(args),
-                });
-                return new Response(JSON.stringify(result));
             }
+            const result = await gql.graphql({
+                schema: schema,
+                source: query.query,
+                variableValues: query.variables,
+                rootValue: RootResolver(args),
+            });
+            return new Response(JSON.stringify(result));
         } catch (error) {
             return new Response(`{"errors":"${error}"}`);
         }
@@ -372,12 +417,17 @@ const graphiql = `
                         tags: [],
                     }
                     const event = await ext.signEvent(unsigned_event);
-                    fetch('/api/auth/login', {
+                    const response = await fetch('/api/auth/login', {
                         headers: {
                             authorization: "Nostr " + btoa(JSON.stringify(event)),
                         },
-                        credentials: 'include'
                     })
+                    const data = await response.json();
+                    if(data.success) {
+                        alert("Login success");
+                    } else {
+                        alert(data.error || "Login failed");
+                    }
                 } catch (e) {
                     console.error(e);
                 }
