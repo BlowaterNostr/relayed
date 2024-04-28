@@ -62,12 +62,17 @@ export async function run(args: {
         args.kv = await Deno.openKv();
     }
 
-    const { port, default_policy,default_information } = args;
+    const { port, default_policy, default_information } = args;
 
     if (default_information) {
-        const { pubkey } = default_information;
-        if (pubkey) {
-            const pubkeyArray = pubkey.split(",");
+        if (!default_information.pubkey) {
+            const env_pubkey = Deno.env.get("relayed_pubkey");
+            if (env_pubkey) {
+                default_information.pubkey = env_pubkey;
+            }
+        }
+        if (default_information.pubkey) {
+            const pubkeyArray = default_information.pubkey.split(",");
             for (const pubkey of pubkeyArray) {
                 const pubkeyObj = PublicKey.FromString(pubkey);
                 if (pubkeyObj instanceof Error) {
@@ -89,16 +94,17 @@ export async function run(args: {
         default_information,
     );
 
-    const { password } = args;
-    if (!password) {
-        const { pubkey } = await relayInformationStore.resolveRelayInformation();
-        if (!pubkey) {
-            const env_pubkey = default_information?.pubkey;
-            if (!env_pubkey) {
-                return new Error(
-                    "password or pubkey is not set, please set env var $relayed_pw or $relayed_pubkey",
-                );
-            }
+    let { password } = args;
+    const { pubkey } = await relayInformationStore.resolveRelayInformation();
+    if (!pubkey) {
+        const env_password = Deno.env.get("relayed_pw");
+        if (env_password) {
+            password = env_password;
+        }
+        if (!default_information?.pubkey && !env_password) {
+            return new Error(
+                "password and pubkey is not set, please set env var $relayed_pw or $relayed_pubkey",
+            );
         }
     }
 
@@ -302,7 +308,7 @@ async function verifyToken(token: string | null, relayInformationStore: RelayInf
             };
         }
         const relayPubkeyArr = relayPubkey.split(",");
-        const relayPubkeyHexArr: string[] = []
+        const relayPubkeyHexArr: string[] = [];
         for (const pubkey of relayPubkeyArr) {
             const relayPubkeyObj = PublicKey.FromString(pubkey);
             if (relayPubkeyObj instanceof Error) {

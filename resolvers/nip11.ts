@@ -30,7 +30,12 @@ export class RelayInformationStore {
     }
 
     resolveRelayInformation = async (): Promise<RelayInformation> => {
-        const get_relay_information = (await this.kv.get<RelayInformation>(["relay_information"])).value;
+        const get_relay_information = (await this.kv.get<RelayInformation>(["relay_information"])).value ||
+            {};
+        // if pubkey is set in default_information, it will be used as the pubkey
+        if (this.default_information.pubkey) {
+            get_relay_information.pubkey = this.default_information.pubkey;
+        }
         return { ...this.default_information, ...get_relay_information, ...not_modifiable_information };
     };
 
