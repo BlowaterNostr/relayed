@@ -275,62 +275,38 @@ const information_handler = async (args: { relayInformationStore: RelayInformati
 async function verifyToken(token: string | null, relayInformationStore: RelayInformationStore) {
     try {
         if (!token) {
-            return {
-                success: false,
-                error: "token not found",
-            };
+            throw new Error("token not found");
         }
         const [prefix, eventBase64] = token.split(" ");
         if (prefix !== "Nostr") {
-            return {
-                success: false,
-                error: "token not Nostr",
-            };
+            throw new Error("token not Nostr");
         }
         const event = JSON.parse(atob(eventBase64));
         if (!event) {
-            return {
-                success: false,
-                error: "no auth event",
-            };
+            throw new Error("no auth event");
         }
         if (!await verifyEvent(event)) {
-            return {
-                success: false,
-                error: "token not verified",
-            };
+            throw new Error("token not verified");
         }
         const { pubkey: relayPubkey } = await relayInformationStore.resolveRelayInformation();
         if (!relayPubkey) {
-            return {
-                success: false,
-                error: "relay pubkey not set",
-            };
+            throw new Error("relay pubkey not set");
         }
         const relayPubkeyArr = relayPubkey.split(",");
         const relayPubkeyHexArr: string[] = [];
         for (const pubkey of relayPubkeyArr) {
             const relayPubkeyObj = PublicKey.FromString(pubkey);
             if (relayPubkeyObj instanceof Error) {
-                return {
-                    success: false,
-                    error: `relay pubkey:${pubkey} not valid`,
-                };
+                throw new Error(`relay pubkey:${pubkey} not valid`);
             }
             relayPubkeyHexArr.push(relayPubkeyObj.hex);
         }
         const pubkey = PublicKey.FromString(event.pubkey);
         if (pubkey instanceof Error) {
-            return {
-                success: false,
-                error: "pubkey not valid",
-            };
+            throw new Error("pubkey not valid");
         }
         if (!relayPubkeyHexArr.includes(pubkey.hex)) {
-            return {
-                success: false,
-                error: "you are not admin",
-            };
+            throw new Error("pubkey not in relay");
         }
         return {
             success: true,
