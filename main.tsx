@@ -62,7 +62,20 @@ export async function run(args: {
         args.kv = await Deno.openKv();
     }
 
-    const { port, default_policy, default_information } = args;
+    const { port, default_policy,default_information } = args;
+
+    if (default_information) {
+        const { pubkey } = default_information;
+        if (pubkey) {
+            const pubkeyArray = pubkey.split(",");
+            for (const pubkey of pubkeyArray) {
+                const pubkeyObj = PublicKey.FromString(pubkey);
+                if (pubkeyObj instanceof Error) {
+                    return pubkeyObj;
+                }
+            }
+        }
+    }
 
     let resolve_hostname;
     const hostname = new Promise<string>((resolve) => {
@@ -76,18 +89,15 @@ export async function run(args: {
         default_information,
     );
 
-    let { password } = args;
+    const { password } = args;
     if (!password) {
         const { pubkey } = await relayInformationStore.resolveRelayInformation();
         if (!pubkey) {
-            const env_pubkey = Deno.env.get("relayed_pubkey");
+            const env_pubkey = default_information?.pubkey;
             if (!env_pubkey) {
-                password = Deno.env.get("relayed_pw");
-                if (!password) {
-                    return new Error(
-                        "password or pubkey is not set, please set env var $relayed_pw or $relayed_pubkey",
-                    );
-                }
+                return new Error(
+                    "password or pubkey is not set, please set env var $relayed_pw or $relayed_pubkey",
+                );
             }
         }
     }
@@ -148,72 +158,6 @@ export type EventReadWriter = {
     get_replaceable_events: func_GetReplaceableEvents;
 } & interface_GetEventsByAuthors;
 
-async function vertifyToken(token: string | null, relayInformationStore: RelayInformationStore) {
-    try {
-        if (!token) {
-            return {
-                success: false,
-                error: "token not found",
-            }
-        }
-        const [prefix, eventBase64] = token.split(" ");
-        if(prefix !== "Nostr") {
-            return {
-                success: false,
-                error: "token not Nostr",
-            }
-        }
-        const event = JSON.parse(atob(eventBase64));
-        if (!event) {
-            return {
-                success: false,
-                error: "no auth event",
-            }
-        }
-        if (!await verifyEvent(event)) {
-            return {
-                success: false,
-                error: "token not verified",
-            }
-        }
-        const { pubkey: relayPubkey } = await relayInformationStore.resolveRelayInformation();
-        if (!relayPubkey) {
-            return {
-                success: false,
-                error: "relay pubkey not set",
-            }
-        }
-        const relayPubkeyObj = PublicKey.FromString(relayPubkey);
-        if (relayPubkeyObj instanceof Error) {
-            return {
-                success: false,
-                error: "relay pubkey not valid",
-            }
-        }
-        const pubkey = PublicKey.FromString(event.pubkey);
-        if (pubkey instanceof Error) {
-            return {
-                success: false,
-                error: "pubkey not valid",
-            }
-        }
-        if (pubkey.hex !== relayPubkeyObj.hex) {
-            return {
-                success: false,
-                error: "you are not admin",
-            }
-        }
-        return {
-            success: true,
-        }
-    } catch (error) {
-        return {
-            success: false,
-            error: error.toString(),
-        }
-    }
-}
-
 const root_handler = (
     args: {
         password?: string;
@@ -232,7 +176,7 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
     const { pathname, protocol } = new URL(req.url);
     if (pathname === "/api/auth/login") {
         const auth = req.headers.get("authorization");
-        const body = await vertifyToken(auth, args.relayInformationStore)
+        const body = await verifyToken(auth, args.relayInformationStore);
         const resp = new Response(JSON.stringify(body), { status: 200 });
         resp.headers.set("set-cookie", `token=${auth}; Path=/; Secure; HttpOnly; SameSite=Strict;`);
         return resp;
@@ -271,7 +215,7 @@ async (req: Request) => {
             if (!args.password) {
                 const cookies = getCookies(req.headers);
                 const token = cookies.token;
-                const body = await vertifyToken(token, args.relayInformationStore)
+                const body = await verifyToken(token, args.relayInformationStore);
                 if (!body.success) {
                     return new Response(JSON.stringify(body), { status: 200 });
                 }
@@ -321,6 +265,77 @@ const information_handler = async (args: { relayInformationStore: RelayInformati
     resp.headers.set("Access-Control-Allow-Headers", "accept,content-type");
     return resp;
 };
+
+async function verifyToken(token: string | null, relayInformationStore: RelayInformationStore) {
+    try {
+        if (!token) {
+            return {
+                success: false,
+                error: "token not found",
+            };
+        }
+        const [prefix, eventBase64] = token.split(" ");
+        if (prefix !== "Nostr") {
+            return {
+                success: false,
+                error: "token not Nostr",
+            };
+        }
+        const event = JSON.parse(atob(eventBase64));
+        if (!event) {
+            return {
+                success: false,
+                error: "no auth event",
+            };
+        }
+        if (!await verifyEvent(event)) {
+            return {
+                success: false,
+                error: "token not verified",
+            };
+        }
+        const { pubkey: relayPubkey } = await relayInformationStore.resolveRelayInformation();
+        if (!relayPubkey) {
+            return {
+                success: false,
+                error: "relay pubkey not set",
+            };
+        }
+        const relayPubkeyArr = relayPubkey.split(",");
+        const relayPubkeyHexArr: string[] = []
+        for (const pubkey of relayPubkeyArr) {
+            const relayPubkeyObj = PublicKey.FromString(pubkey);
+            if (relayPubkeyObj instanceof Error) {
+                return {
+                    success: false,
+                    error: `relay pubkey:${pubkey} not valid`,
+                };
+            }
+            relayPubkeyHexArr.push(relayPubkeyObj.hex);
+        }
+        const pubkey = PublicKey.FromString(event.pubkey);
+        if (pubkey instanceof Error) {
+            return {
+                success: false,
+                error: "pubkey not valid",
+            };
+        }
+        if (!relayPubkeyHexArr.includes(pubkey.hex)) {
+            return {
+                success: false,
+                error: "you are not admin",
+            };
+        }
+        return {
+            success: true,
+        };
+    } catch (error) {
+        return {
+            success: false,
+            error: error.toString(),
+        };
+    }
+}
 
 // export const kv = await Deno.openKv("./test-kv");
 
