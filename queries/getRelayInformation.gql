@@ -6,7 +6,6 @@ query getRelayInformation {
     icon
     pubkey {
       hex
-      bech32
     }
     software
     supported_nips

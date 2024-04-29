@@ -47,7 +47,6 @@ export class RelayInformationStore {
         if (!entry.value) {
             return { ...this.default_information, ...not_modifiable_information };
         }
-
         return { ...this.default_information, ...entry.value, ...not_modifiable_information };
     };
 
@@ -61,10 +60,9 @@ export class RelayInformationStore {
         if (old_information instanceof Error) {
             return old_information;
         }
-
         const new_information = { ...old_information, ...args };
         await this.kv.set(["relay_information"], new_information);
-        return { ...new_information, ...not_modifiable_information, pubkey: this.default_information.pubkey };
+        return { ...this.default_information, ...new_information, ...not_modifiable_information };
     };
 }
 

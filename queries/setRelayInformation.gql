@@ -11,7 +11,6 @@ mutation setRelayInformation($contact: String, $name: String, $description: Stri
     icon
     pubkey {
       hex
-      bech32
     }
     software
     supported_nips

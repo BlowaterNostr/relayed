@@ -188,7 +188,7 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
         });
     });
 
-    const ok = await t.step("set relay information", async () => {
+    await t.step("set relay information", async () => {
         await relay.set_relay_information({
             name: "Nostr Relay2",
         });
@@ -203,9 +203,6 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
             ...not_modifiable_information,
         });
     });
-    if (!ok) {
-        fail();
-    }
 
     await t.step("graphql get relay information", async () => {
         const query = await Deno.readTextFile("./queries/getRelayInformation.gql");
@@ -218,7 +215,6 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
             description: null,
             pubkey: {
                 hex: test_ctx.publicKey.hex,
-                bech32: test_ctx.publicKey.bech32(),
             },
             ...not_modifiable_information,
         });
@@ -238,7 +234,6 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
             description: null,
             pubkey: {
                 hex: test_ctx.publicKey.hex,
-                bech32: test_ctx.publicKey.bech32(),
             },
             ...not_modifiable_information,
         });
