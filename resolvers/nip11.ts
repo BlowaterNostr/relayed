@@ -1,5 +1,13 @@
 import { PublicKey } from "../_libs.ts";
 
+export type RelayInformationSave = {
+    name?: string;
+    description?: string;
+    pubkey?: string;
+    contact?: string;
+    icon?: string;
+}
+
 export type RelayInformation = {
     name?: string;
     description?: string;
@@ -31,38 +39,33 @@ export class RelayInformationStore {
         this.default_information = default_information;
     }
 
-    resolveRelayInformation = async (): Promise<RelayInformation> => {
-        const get_relay_information = (await this.kv.get<RelayInformation>(["relay_information"])).value;
-        // if pubkey is set in default_information, it will be used as the pubkey
-        if (get_relay_information && this.default_information.pubkey) {
-            get_relay_information.pubkey = this.default_information.pubkey;
+    resolveRelayInformation = async (): Promise<RelayInformation | Error> => {
+        const store_information_i = (await this.kv.get<RelayInformationSave>(["relay_information"])).value;
+        if(!store_information_i) {
+            return { ...this.default_information, ...not_modifiable_information };
         }
-        return { ...this.default_information, ...get_relay_information, ...not_modifiable_information };
+        if (!store_information_i.pubkey) {
+            return { ...this.default_information, ...{ name: store_information_i.name, contact: store_information_i.contact, description: store_information_i.description, icon: store_information_i.icon }, ...not_modifiable_information };
+        }
+        const get_relay_information_pubkey = PublicKey.FromString(store_information_i.pubkey);
+        if (get_relay_information_pubkey instanceof Error) {
+            return get_relay_information_pubkey
+        }
+        const store_infomation = {
+            ...store_information_i,
+            pubkey: get_relay_information_pubkey,
+        }
+        return { ...this.default_information, ...store_infomation, ...not_modifiable_information };
     };
 
-    set_relay_information = async (
-        args: {
-            name?: string;
-            description?: string;
-            pubkey?: string;
-            contact?: string;
-            icon?: string;
-        },
-    ) => {
+    set_relay_information = async (args: RelayInformationSave) => {
         const old_information = await this.resolveRelayInformation();
-        const new_information = {
-            ...old_information,
-            name: args.name,
-            description: args.description,
-            contact: args.contact,
-            icon: args.icon,
-        };
-        if (args.pubkey) {
-            const pubkey = PublicKey.FromString(args.pubkey);
-            if (pubkey instanceof Error) {
-                throw new Error("Invalid pubkey");
-            }
-            new_information.pubkey = pubkey;
+        if (old_information instanceof Error) {
+            return old_information;
+        }
+        const new_information = {...old_information, ...args};
+        if (new_information.pubkey instanceof PublicKey) {
+            new_information.pubkey = new_information.pubkey.hex
         }
         await this.kv.set(["relay_information"], new_information);
         return { ...new_information, ...not_modifiable_information };

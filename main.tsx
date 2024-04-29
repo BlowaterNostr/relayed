@@ -231,15 +231,24 @@ export const supported_nips = [1, 2];
 export const software = "https://github.com/BlowaterNostr/relayed";
 
 const landing_handler = async (args: { relayInformationStore: RelayInformationStore }) => {
+    const storeInformation = await args.relayInformationStore.resolveRelayInformation();
+    if(storeInformation instanceof Error) {
+        return new Response(render(Error404()), { status: 404 });
+    }
     const resp = new Response(
-        render(Landing(await args.relayInformationStore.resolveRelayInformation()), { status: 200 }),
+        render(Landing(storeInformation), { status: 200 }),
     );
     resp.headers.set("content-type", "html");
     return resp;
 };
 
 const information_handler = async (args: { relayInformationStore: RelayInformationStore }) => {
-    const resp = new Response(JSON.stringify(await args.relayInformationStore.resolveRelayInformation()), {
+    const storeInformation = await args.relayInformationStore.resolveRelayInformation();
+    if(storeInformation instanceof Error) {
+        return new Response(render(Error404()), { status: 404 });
+    }
+    const information = { ...storeInformation, pubkey: storeInformation.pubkey.bech32()}
+    const resp = new Response(JSON.stringify(information), {
         status: 200,
     });
     resp.headers.set("content-type", "application/json; charset=utf-8");
@@ -258,7 +267,11 @@ async function verifyToken(event: NostrEvent, relayInformationStore: RelayInform
         if (pubkey instanceof Error) {
             throw new Error("pubkey not valid");
         }
-        if (pubkey.hex !== (await relayInformationStore.resolveRelayInformation()).pubkey.hex) {
+        const storeInformation = await relayInformationStore.resolveRelayInformation();
+        if(storeInformation instanceof Error) {
+            throw new Error("store pubkey not valid");
+        }
+        if (pubkey.hex !== storeInformation.pubkey.hex) {
             throw new Error("not admin");
         }
         return {
