@@ -23,6 +23,15 @@ const test_kv = async () => {
     return await Deno.openKv("test.sqlite");
 };
 
+const test_ctx = InMemoryAccountContext.Generate();
+const test_auth_event = async () => {
+    const event = await prepareNormalNostrEvent(test_ctx, {
+        kind: NostrKind.TEXT_NOTE,
+        content: "",
+    });
+    return btoa(JSON.stringify(event));
+}
+
 // Need to keep consistent with resolvers/nip11.ts
 const not_modifiable_information = {
     software: "https://github.com/BlowaterNostr/relayed",
@@ -34,6 +43,9 @@ Deno.test("main", async (t) => {
     const relay = await run({
         password: "123",
         port: 8080,
+        default_information: {
+            pubkey: test_ctx.publicKey.bech32(),
+        },
         default_policy: {
             allowed_kinds: [NostrKind.Long_Form, NostrKind.Encrypted_Custom_App_Data],
         },
@@ -155,8 +167,10 @@ Deno.test("main", async (t) => {
 // https://github.com/nostr-protocol/nips/blob/master/01.md#kinds
 Deno.test("replaceable events", async (t) => {
     const relay = await run({
-        password: "123",
         port: 8080,
+        default_information: {
+            pubkey: test_ctx.publicKey.bech32(),
+        },
         default_policy: {
             allowed_kinds: "all",
         },
@@ -173,8 +187,10 @@ Deno.test("replaceable events", async (t) => {
 // https://github.com/nostr-protocol/nips/blob/master/09.md
 Deno.test("NIP-9: Deletion", async () => {
     const relay = await run({
-        password: "123",
         port: 8080,
+        default_information: {
+            pubkey: test_ctx.publicKey.bech32(),
+        },
         default_policy: {
             allowed_kinds: "all",
         },
@@ -191,13 +207,13 @@ Deno.test("NIP-9: Deletion", async () => {
 // https://github.com/nostr-protocol/nips/blob/master/11.md
 Deno.test("NIP-11: Relay Information Document", async (t) => {
     const relay = await run({
-        password: "123",
         port: 8080,
         default_policy: {
             allowed_kinds: "none",
         },
         default_information: {
             name: "Nostr Relay",
+            pubkey: test_ctx.publicKey.bech32(),
         },
         kv: await test_kv(),
     }) as Relay;
@@ -258,12 +274,11 @@ async function randomEvent(ctx: InMemoryAccountContext, kind?: NostrKind, conten
 
 async function queryGql(relay: Relay, query: string, variables?: object) {
     const { hostname, port } = new URL(relay.url);
-    if (!relay.password) throw new Error("relay.password is not set on test");
     const res = await fetch(`http://${hostname}:${port}/api`, {
         method: "POST",
         headers: {
+            "cookie": `token="nostr ${test_auth_event()}`,
             "Content-Type": "application/json",
-            "password": relay.password,
         },
         body: JSON.stringify({ query, variables }),
     });

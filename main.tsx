@@ -35,7 +35,6 @@ export type DefaultPolicy = {
 export type Relay = {
     server: Deno.HttpServer;
     url: string;
-    password?: string;
     shutdown: () => Promise<void>;
     set_policy: (args: {
         kind: NostrKind;
@@ -94,20 +93,6 @@ export async function run(args: {
         default_information,
     );
 
-    let { password } = args;
-    const { pubkey } = await relayInformationStore.resolveRelayInformation();
-    if (!pubkey) {
-        const env_password = Deno.env.get("relayed_pw");
-        if (env_password) {
-            password = env_password;
-        }
-        if (!default_information?.pubkey && !env_password) {
-            return new Error(
-                "password and pubkey is not set, please set env var $relayed_pw or $relayed_pubkey",
-            );
-        }
-    }
-
     const eventStore = await EventStore.New(args.kv);
 
     const server = Deno.serve(
@@ -121,7 +106,6 @@ export async function run(args: {
         },
         root_handler({
             ...args,
-            password,
             connections,
             resolvePolicyByKind: policyStore.resolvePolicyByKind,
             get_events_by_IDs: eventStore.get_events_by_IDs.bind(eventStore),
@@ -140,7 +124,6 @@ export async function run(args: {
 
     return {
         server,
-        password,
         url: `ws://${await hostname}:${port}`,
         shutdown: async () => {
             await server.shutdown();
@@ -166,7 +149,6 @@ export type EventReadWriter = {
 
 const root_handler = (
     args: {
-        password?: string;
         information?: RelayInformation;
         connections: Map<WebSocket, SubscriptionMap>;
         default_policy: DefaultPolicy;
