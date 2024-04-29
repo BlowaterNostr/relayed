@@ -64,7 +64,7 @@ export class RelayInformationStore {
 
         const new_information = { ...old_information, ...args };
         await this.kv.set(["relay_information"], new_information);
-        return { ...new_information, ...not_modifiable_information };
+        return { ...new_information, ...not_modifiable_information, pubkey: this.default_information.pubkey };
     };
 }
 

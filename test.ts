@@ -43,7 +43,7 @@ Deno.test("main", async (t) => {
     const relay = await run({
         port: 8080,
         default_information: {
-            pubkey: test_ctx.publicKey,
+            pubkey: test_ctx.publicKey.hex,
         },
         default_policy: {
             allowed_kinds: [NostrKind.Long_Form, NostrKind.Encrypted_Custom_App_Data],
@@ -174,7 +174,7 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
         },
         default_information: {
             name: "Nostr Relay",
-            pubkey: test_ctx.publicKey,
+            pubkey: test_ctx.publicKey.hex,
         },
         kv: await test_kv(),
     }) as Relay;
@@ -188,7 +188,7 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
         });
     });
 
-    await t.step("set relay information", async () => {
+    const ok = await t.step("set relay information", async () => {
         await relay.set_relay_information({
             name: "Nostr Relay2",
         });
@@ -196,10 +196,16 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
         const information2 = await relay.get_relay_information();
         assertEquals(information2, {
             name: "Nostr Relay2",
-            pubkey: test_ctx.publicKey,
+            // @ts-ignore
+            pubkey: {
+                hex: test_ctx.publicKey.hex,
+            },
             ...not_modifiable_information,
         });
     });
+    if (!ok) {
+        fail();
+    }
 
     await t.step("graphql get relay information", async () => {
         const query = await Deno.readTextFile("./queries/getRelayInformation.gql");

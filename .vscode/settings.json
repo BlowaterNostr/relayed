@@ -1,4 +1,5 @@
 {
     "deno.enable": true,
-    "editor.indentSize": "tabSize"
+    "editor.indentSize": "tabSize",
+    "deno.lint": false
 }
