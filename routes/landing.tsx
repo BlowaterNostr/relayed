@@ -18,7 +18,7 @@ export default function Landing(information?: RelayInformation) {
                             <span class="font-bold">Description:</span> {information?.description}
                         </li>
                         <li>
-                            <span class="font-bold">Pubkey:</span> {information?.pubkey}
+                            <span class="font-bold">Pubkey:</span> {information?.pubkey.bech32()}
                         </li>
                         <li>
                             <span class="font-bold">Contact:</span> {information?.contact}

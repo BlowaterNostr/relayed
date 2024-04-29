@@ -5,7 +5,7 @@ import { RootResolver } from "./resolvers/root.ts";
 import * as gql from "https://esm.sh/graphql@16.8.1";
 import { Policy } from "./resolvers/policy.ts";
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
-import { NostrKind, PublicKey } from "./_libs.ts";
+import { NostrEvent, NostrKind, PublicKey, verifyEvent } from "./_libs.ts";
 import { PolicyStore } from "./resolvers/policy.ts";
 import { Policies } from "./resolvers/policy.ts";
 import {
@@ -15,7 +15,12 @@ import {
 } from "./resolvers/event.ts";
 import Landing from "./routes/landing.tsx";
 import Error404 from "./routes/_404.tsx";
-import { RelayInformation, RelayInformationStore } from "./resolvers/nip11.ts";
+import {
+    informationPubkeyStringify,
+    RelayInformation,
+    RelayInformationStore,
+    RelayInformationStringify,
+} from "./resolvers/nip11.ts";
 import {
     EventStore,
     func_GetEventsByFilter,
@@ -24,6 +29,7 @@ import {
     func_MarkEventDeleted,
     func_WriteRegularEvent,
 } from "./resolvers/event.ts";
+import { Cookie, getCookies, setCookie } from "https://deno.land/std@0.224.0/http/cookie.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -34,7 +40,6 @@ export type DefaultPolicy = {
 export type Relay = {
     server: Deno.HttpServer;
     url: string;
-    password: string;
     shutdown: () => Promise<void>;
     set_policy: (args: {
         kind: NostrKind;
@@ -43,33 +48,49 @@ export type Relay = {
         block?: Set<string>;
     }) => Promise<Policy | Error>;
     get_policy: (kind: NostrKind) => Promise<Policy>;
-    set_relay_information: (args: RelayInformation) => Promise<RelayInformation>;
-    get_relay_information: () => Promise<RelayInformation>;
+    set_relay_information: (args: {
+        name?: string;
+        description?: string;
+        contact?: string;
+        icon?: string;
+    }) => Promise<RelayInformation | Error>;
+    get_relay_information: () => Promise<RelayInformation | Error>;
     default_policy: DefaultPolicy;
 };
+
+const ENV_relayed_pubkey = "relayed_pubkey";
 
 export async function run(args: {
     port: number;
     admin?: PublicKey;
-    password?: string;
-    default_information?: RelayInformation;
     default_policy: DefaultPolicy;
+    default_information?: RelayInformationStringify;
     kv?: Deno.Kv;
 }): Promise<Error | Relay> {
-    const connections = new Map<WebSocket, SubscriptionMap>();
-    let { password } = args;
-    if (password == undefined) {
-        password = Deno.env.get("relayed_pw");
-        if (!password) {
-            return new Error("password is not set, please set env var $relayed_pw");
-        }
-    }
+    // argument checking
     if (args.kv == undefined) {
         args.kv = await Deno.openKv();
     }
 
-    const { port, default_policy, default_information } = args;
+    let admin_pubkey: string | undefined | PublicKey | Error = args.default_information?.pubkey;
+    if (admin_pubkey == undefined) {
+        const env_pubkey = Deno.env.get(ENV_relayed_pubkey);
+        if (env_pubkey == undefined) {
+            return new Error(
+                "public key is not set. Please set env var $relayed_pubkey or pass default_information.pubkey in the argument",
+            );
+        }
+        admin_pubkey = env_pubkey;
+    }
 
+    admin_pubkey = PublicKey.FromString(admin_pubkey);
+    if (admin_pubkey instanceof Error) {
+        return admin_pubkey;
+    }
+
+    const { port, default_policy } = args;
+    ///////////////
+    const connections = new Map<WebSocket, SubscriptionMap>();
     let resolve_hostname;
     const hostname = new Promise<string>((resolve) => {
         resolve_hostname = resolve;
@@ -79,7 +100,10 @@ export async function run(args: {
     const policyStore = new PolicyStore(default_policy, args.kv, await get_all_policies());
     const relayInformationStore = new RelayInformationStore(
         args.kv,
-        default_information,
+        {
+            ...args.default_information,
+            pubkey: admin_pubkey,
+        },
     );
 
     const eventStore = await EventStore.New(args.kv);
@@ -95,7 +119,6 @@ export async function run(args: {
         },
         root_handler({
             ...args,
-            password,
             connections,
             resolvePolicyByKind: policyStore.resolvePolicyByKind,
             get_events_by_IDs: eventStore.get_events_by_IDs.bind(eventStore),
@@ -114,7 +137,6 @@ export async function run(args: {
 
     return {
         server,
-        password,
         url: `ws://${await hostname}:${port}`,
         shutdown: async () => {
             await server.shutdown();
@@ -140,8 +162,6 @@ export type EventReadWriter = {
 
 const root_handler = (
     args: {
-        password: string;
-        information?: RelayInformation;
         connections: Map<WebSocket, SubscriptionMap>;
         default_policy: DefaultPolicy;
         resolvePolicyByKind: func_ResolvePolicyByKind;
@@ -154,6 +174,30 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
     console.log(info.remoteAddr);
 
     const { pathname, protocol } = new URL(req.url);
+    if (pathname === "/api/auth/login") {
+        const body = await req.json();
+        if (!body) {
+            return new Response(`{"errors":"request body is null"}`, { status: 400 });
+        }
+        const error = await verifyToken(body, args.relayInformationStore);
+        if (error instanceof Error) {
+            return new Response(JSON.stringify(error.message), { status: 400 });
+        } else {
+            const auth = btoa(JSON.stringify(body));
+            const headers = new Headers();
+            const cookie: Cookie = {
+                name: "token",
+                value: auth,
+                path: "/",
+                secure: true,
+                httpOnly: true,
+                sameSite: "Strict",
+            };
+            setCookie(headers, cookie);
+            const resp = new Response("", { status: 200, headers });
+            return resp;
+        }
+    }
     if (pathname == "/api") {
         return graphql_handler(args)(req);
     }
@@ -175,27 +219,41 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
 
 const graphql_handler = (
     args: {
-        password: string;
         kv: Deno.Kv;
         policyStore: PolicyStore;
         relayInformationStore: RelayInformationStore;
     },
 ) =>
 async (req: Request) => {
-    const { password, policyStore } = args;
     if (req.method == "POST") {
-        const query = await req.json();
-        const pw = req.headers.get("password");
-        if (pw != password) {
-            return new Response(`{"errors":"incorrect password"}`);
+        try {
+            const query = await req.json();
+            const cookies = getCookies(req.headers);
+            const token = cookies.token;
+            if (!token) {
+                return new Response(`{"errors":"no token"}`);
+            }
+            console.log(`get token: ${token}`);
+            const event = JSON.parse(atob(token));
+            console.log(`get event: ${JSON.stringify(event)}`);
+            const error = await verifyToken(event, args.relayInformationStore);
+            if (error instanceof Error) {
+                return new Response(JSON.stringify({
+                    errors: [error.message],
+                }));
+            }
+            const result = await gql.graphql({
+                schema: schema,
+                source: query.query,
+                variableValues: query.variables,
+                rootValue: RootResolver(args),
+            });
+            return new Response(JSON.stringify(result));
+        } catch (error) {
+            return new Response(JSON.stringify({
+                errors: [`${error}`],
+            }));
         }
-        const result = await gql.graphql({
-            schema: schema,
-            source: query.query,
-            variableValues: query.variables,
-            rootValue: RootResolver(args),
-        });
-        return new Response(JSON.stringify(result));
     } else if (req.method == "GET") {
         const res = new Response(graphiql);
         res.headers.set("content-type", "html");
@@ -209,15 +267,24 @@ export const supported_nips = [1, 2];
 export const software = "https://github.com/BlowaterNostr/relayed";
 
 const landing_handler = async (args: { relayInformationStore: RelayInformationStore }) => {
+    const storeInformation = await args.relayInformationStore.resolveRelayInformation();
+    if (storeInformation instanceof Error) {
+        return new Response(render(Error404()), { status: 404 });
+    }
     const resp = new Response(
-        render(Landing(await args.relayInformationStore.resolveRelayInformation()), { status: 200 }),
+        render(Landing(storeInformation), { status: 200 }),
     );
     resp.headers.set("content-type", "html");
     return resp;
 };
 
 const information_handler = async (args: { relayInformationStore: RelayInformationStore }) => {
-    const resp = new Response(JSON.stringify(await args.relayInformationStore.resolveRelayInformation()), {
+    const storeInformation = await args.relayInformationStore.resolveRelayInformation();
+    if (storeInformation instanceof Error) {
+        return new Response(render(Error404()), { status: 404 });
+    }
+    const information = informationPubkeyStringify(storeInformation);
+    const resp = new Response(JSON.stringify(information), {
         status: 200,
     });
     resp.headers.set("content-type", "application/json; charset=utf-8");
@@ -226,6 +293,23 @@ const information_handler = async (args: { relayInformationStore: RelayInformati
     resp.headers.set("Access-Control-Allow-Headers", "accept,content-type");
     return resp;
 };
+
+async function verifyToken(event: NostrEvent, relayInformationStore: RelayInformationStore) {
+    if (!await verifyEvent(event)) {
+        return new Error("token not verified");
+    }
+    const pubkey = PublicKey.FromString(event.pubkey);
+    if (pubkey instanceof Error) {
+        return pubkey;
+    }
+    const storeInformation = await relayInformationStore.resolveRelayInformation();
+    if (storeInformation instanceof Error) {
+        return storeInformation;
+    }
+    if (pubkey.hex !== storeInformation.pubkey.hex) {
+        return new Error("your pubkey is not an admin");
+    }
+}
 
 // export const kv = await Deno.openKv("./test-kv");
 
@@ -250,7 +334,7 @@ const graphiql = `
       }
 
       #graphiql {
-        height: 100vh;
+        height: 95vh;
       }
     </style>
     <!--
@@ -293,6 +377,7 @@ const graphiql = `
   </head>
 
   <body>
+    <button id="nip7">Login with NIP-07 extensions</button>
     <div id="graphiql">Loading...</div>
     <script>
       const root = ReactDOM.createRoot(document.getElementById('graphiql'));
@@ -307,6 +392,37 @@ const graphiql = `
           plugins: [explorerPlugin],
         }),
       );
+      const nip7 = document.getElementById('nip7');
+        nip7.onclick = async () => {
+            if ("nostr" in window) {
+                try {
+                    const ext = window.nostr;
+                    const pubkey = await ext.getPublicKey();
+                    const unsigned_event = {
+                        pubkey,
+                        content: "",
+                        created_at: Math.floor(Date.now() / 1000),
+                        kind: 27235,
+                        tags: [],
+                    }
+                    const event = await ext.signEvent(unsigned_event);
+                    const response = await fetch('/api/auth/login', {
+                        method: 'POST',
+                        body: JSON.stringify(event),
+                    })
+                    if(response.status === 200) {
+                        nip7.innerText = "Logged in";
+                    } else {
+                        const text = await response.text();
+                        alert(text || "Login failed");
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            } else {
+                alert("Nostr extension not found");
+            }
+        };
     </script>
   </body>
 </html>`;

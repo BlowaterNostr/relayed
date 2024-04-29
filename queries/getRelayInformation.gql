@@ -4,7 +4,9 @@ query getRelayInformation {
     contact
     description
     icon
-    pubkey
+    pubkey {
+      hex
+    }
     software
     supported_nips
     version
