@@ -206,7 +206,7 @@ async (req: Request) => {
             const event = JSON.parse(atob(token));
             const body = await verifyToken(event, args.relayInformationStore);
             if (!body.success) {
-                return new Response(JSON.stringify(body), { status: 200 });
+                return new Response(`{"errors":"${body.error}"}`);
             }
             const result = await gql.graphql({
                 schema: schema,
@@ -295,7 +295,7 @@ const graphiql = `
       }
 
       #graphiql {
-        height: 100vh;
+        height: 95vh;
       }
     </style>
     <!--
@@ -371,11 +371,11 @@ const graphiql = `
                         method: 'POST',
                         body: JSON.stringify(event),
                     })
-                    const data = await response.json();
-                    if(data.success) {
-                        alert("Login success");
+                    if(response.status === 200) {
+                        nip7.innerText = "Logged in";
                     } else {
-                        alert(data.error || "Login failed");
+                        const text = await response.text();
+                        alert(text || "Login failed");
                     }
                 } catch (e) {
                     console.error(e);
