@@ -45,7 +45,7 @@ export const typeDefs = gql`
   type RelayInformation {
     name: String
     description: String
-    pubkey: String
+    pubkey: PublicKey!
     contact: String
     supported_nips: [Int!]
     software: String

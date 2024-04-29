@@ -43,7 +43,7 @@ Deno.test("main", async (t) => {
     const relay = await run({
         port: 8080,
         default_information: {
-            pubkey: test_ctx.publicKey.bech32(),
+            pubkey: test_ctx.publicKey,
         },
         default_policy: {
             allowed_kinds: [NostrKind.Long_Form, NostrKind.Encrypted_Custom_App_Data],
@@ -168,7 +168,7 @@ Deno.test("replaceable events", async (t) => {
     const relay = await run({
         port: 8080,
         default_information: {
-            pubkey: test_ctx.publicKey.bech32(),
+            pubkey: test_ctx.publicKey,
         },
         default_policy: {
             allowed_kinds: "all",
@@ -188,7 +188,7 @@ Deno.test("NIP-9: Deletion", async () => {
     const relay = await run({
         port: 8080,
         default_information: {
-            pubkey: test_ctx.publicKey.bech32(),
+            pubkey: test_ctx.publicKey,
         },
         default_policy: {
             allowed_kinds: "all",
@@ -212,7 +212,7 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
         },
         default_information: {
             name: "Nostr Relay",
-            pubkey: test_ctx.publicKey.bech32(),
+            pubkey: test_ctx.publicKey,
         },
         kv: await test_kv(),
     }) as Relay;
@@ -221,7 +221,7 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
         const information = await relay.get_relay_information();
         assertEquals(information, {
             name: "Nostr Relay",
-            pubkey: test_ctx.publicKey.bech32(),
+            pubkey: test_ctx.publicKey,
             ...not_modifiable_information,
         });
     });
@@ -234,7 +234,7 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
         const information2 = await relay.get_relay_information();
         assertEquals(information2, {
             name: "Nostr Relay2",
-            pubkey: test_ctx.publicKey.bech32(),
+            pubkey: test_ctx.publicKey,
             ...not_modifiable_information,
         });
     });
@@ -247,7 +247,7 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
             icon: null,
             contact: null,
             description: null,
-            pubkey: test_ctx.publicKey.bech32(),
+            pubkey: test_ctx.publicKey,
             ...not_modifiable_information,
         });
     });
@@ -263,7 +263,7 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
             icon: null,
             contact: null,
             description: null,
-            pubkey: test_ctx.publicKey.bech32(),
+            pubkey: test_ctx.publicKey,
             ...not_modifiable_information,
         });
     });
@@ -284,7 +284,7 @@ async function queryGql(relay: Relay, query: string, variables?: object) {
     const res = await fetch(`http://${hostname}:${port}/api`, {
         method: "POST",
         headers: {
-            "cookie": `token="nostr ${test_auth_event()}`,
+            "cookie": `token="${test_auth_event()}`,
             "Content-Type": "application/json",
         },
         body: JSON.stringify({ query, variables }),

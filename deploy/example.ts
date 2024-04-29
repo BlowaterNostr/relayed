@@ -1,4 +1,17 @@
+import { PublicKey } from "../_libs.ts";
 import { run } from "../main.tsx";
+
+const relayed_pubkey = Deno.env.get("relayed_pubkey");
+if (!relayed_pubkey) {
+    console.error("Please set the environment variable 'relayed_pubkey'");
+    Deno.exit(1);
+}
+
+const pubkey = PublicKey.FromString(relayed_pubkey);
+if (pubkey instanceof Error) {
+    console.error(pubkey);
+    Deno.exit(1);
+}
 
 const relay = await run({
     port: 8080,
@@ -8,7 +21,7 @@ const relay = await run({
     default_information: {
         name: "Relayed Example",
         description: "A lightweight relay written in Deno.",
-        pubkey: Deno.env.get("relayed_pubkey"),
+        pubkey,
         contact: "",
         icon: "",
     },
