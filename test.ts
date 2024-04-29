@@ -242,6 +242,7 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
     await t.step("graphql get relay information", async () => {
         const query = await Deno.readTextFile("./queries/getRelayInformation.gql");
         const json = await queryGql(relay, query);
+        console.log("graphql get relay information queryGql json:", json)
         assertEquals(json.data.relayInformation, {
             name: "Nostr Relay2",
             icon: null,
@@ -258,6 +259,7 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
         };
         const query = await Deno.readTextFile("./queries/setRelayInformation.gql");
         const json = await queryGql(relay, query, variables);
+        console.log("graphql set relay information queryGql json:", json)
         assertEquals(json.data.set_relay_information, {
             name: "Nostr Relay3",
             icon: null,
@@ -281,10 +283,11 @@ async function randomEvent(ctx: InMemoryAccountContext, kind?: NostrKind, conten
 
 async function queryGql(relay: Relay, query: string, variables?: object) {
     const { hostname, port } = new URL(relay.url);
+    const token = await test_auth_event();
     const res = await fetch(`http://${hostname}:${port}/api`, {
         method: "POST",
         headers: {
-            "cookie": `token="${await test_auth_event()}`,
+            "Cookie": `token="${token}"`,
             "Content-Type": "application/json",
         },
         body: JSON.stringify({ query, variables }),
