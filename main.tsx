@@ -48,25 +48,49 @@ export type Relay = {
         block?: Set<string>;
     }) => Promise<Policy | Error>;
     get_policy: (kind: NostrKind) => Promise<Policy>;
-    set_relay_information: (args: RelayInformationStringify) => Promise<RelayInformation | Error>;
+    set_relay_information: (args: {
+        name?: string;
+        description?: string;
+        contact?: string;
+        icon?: string;
+    }) => Promise<RelayInformation | Error>;
     get_relay_information: () => Promise<RelayInformation | Error>;
     default_policy: DefaultPolicy;
 };
 
+const ENV_relayed_pubkey = "relayed_pubkey";
+
 export async function run(args: {
     port: number;
     admin?: PublicKey;
-    default_information: RelayInformation;
     default_policy: DefaultPolicy;
+    default_information?: RelayInformationStringify;
     kv?: Deno.Kv;
 }): Promise<Error | Relay> {
-    const connections = new Map<WebSocket, SubscriptionMap>();
+    // argument checking
     if (args.kv == undefined) {
         args.kv = await Deno.openKv();
     }
 
-    const { port, default_policy, default_information } = args;
+    let admin_pubkey: string | undefined | PublicKey | Error = args.default_information?.pubkey;
+    if (admin_pubkey == undefined) {
+        const env_pubkey = Deno.env.get(ENV_relayed_pubkey);
+        if (env_pubkey == undefined) {
+            return new Error(
+                "public key is not set. Please set env var $relayed_pubkey or pass default_information.pubkey in the argument",
+            );
+        }
+        admin_pubkey = env_pubkey;
+    }
 
+    admin_pubkey = PublicKey.FromString(admin_pubkey);
+    if (admin_pubkey instanceof Error) {
+        return admin_pubkey;
+    }
+
+    const { port, default_policy } = args;
+    ///////////////
+    const connections = new Map<WebSocket, SubscriptionMap>();
     let resolve_hostname;
     const hostname = new Promise<string>((resolve) => {
         resolve_hostname = resolve;
@@ -76,7 +100,10 @@ export async function run(args: {
     const policyStore = new PolicyStore(default_policy, args.kv, await get_all_policies());
     const relayInformationStore = new RelayInformationStore(
         args.kv,
-        default_information,
+        {
+            ...args.default_information,
+            pubkey: admin_pubkey,
+        },
     );
 
     const eventStore = await EventStore.New(args.kv);
@@ -152,9 +179,9 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
         if (!body) {
             return new Response(`{"errors":"request body is null"}`, { status: 400 });
         }
-        const result = await verifyToken(body, args.relayInformationStore);
-        if (!result.success) {
-            return new Response(JSON.stringify(result), { status: 400 });
+        const error = await verifyToken(body, args.relayInformationStore);
+        if (error instanceof Error) {
+            return new Response(JSON.stringify(error.message), { status: 400 });
         } else {
             const auth = btoa(JSON.stringify(body));
             const headers = new Headers();
@@ -209,9 +236,11 @@ async (req: Request) => {
             console.log(`get token: ${token}`);
             const event = JSON.parse(atob(token));
             console.log(`get event: ${JSON.stringify(event)}`);
-            const body = await verifyToken(event, args.relayInformationStore);
-            if (!body.success) {
-                return new Response(`{"errors":"${body.error}"}`);
+            const error = await verifyToken(event, args.relayInformationStore);
+            if (error instanceof Error) {
+                return new Response(JSON.stringify({
+                    errors: [error.message],
+                }));
             }
             const result = await gql.graphql({
                 schema: schema,
@@ -221,7 +250,9 @@ async (req: Request) => {
             });
             return new Response(JSON.stringify(result));
         } catch (error) {
-            return new Response(`{"errors":"${error}"}`);
+            return new Response(JSON.stringify({
+                errors: [`${error}`],
+            }));
         }
     } else if (req.method == "GET") {
         const res = new Response(graphiql);
@@ -264,29 +295,19 @@ const information_handler = async (args: { relayInformationStore: RelayInformati
 };
 
 async function verifyToken(event: NostrEvent, relayInformationStore: RelayInformationStore) {
-    try {
-        if (!await verifyEvent(event)) {
-            throw new Error("token not verified");
-        }
-        const pubkey = PublicKey.FromString(event.pubkey);
-        if (pubkey instanceof Error) {
-            throw new Error("pubkey not valid");
-        }
-        const storeInformation = await relayInformationStore.resolveRelayInformation();
-        if (storeInformation instanceof Error) {
-            throw new Error("store pubkey not valid");
-        }
-        if (pubkey.hex !== storeInformation.pubkey.hex) {
-            throw new Error("not admin");
-        }
-        return {
-            success: true,
-        };
-    } catch (error) {
-        return {
-            success: false,
-            error: error.toString(),
-        };
+    if (!await verifyEvent(event)) {
+        return new Error("token not verified");
+    }
+    const pubkey = PublicKey.FromString(event.pubkey);
+    if (pubkey instanceof Error) {
+        return pubkey;
+    }
+    const storeInformation = await relayInformationStore.resolveRelayInformation();
+    if (storeInformation instanceof Error) {
+        return storeInformation;
+    }
+    if (pubkey.hex !== storeInformation.pubkey.hex) {
+        return new Error("your pubkey is not an admin");
     }
 }
 

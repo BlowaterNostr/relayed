@@ -14,7 +14,7 @@ export const typeDefs = gql`
     add_allow(kind: Int, pubkey: String, ): Policy!
     remove_allow(kind: Int, pubkey: String, ): Policy!
     set_policy(kind: Int, read: Boolean, write: Boolean): Policy!
-    set_relay_information(name: String, description: String, pubkey: String, contact: String, icon: String): RelayInformation!
+    set_relay_information(name: String, description: String, contact: String, icon: String): RelayInformation!
   }
 
   type Events {
