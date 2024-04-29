@@ -65,6 +65,9 @@ export class RelayInformationStore {
             return old_information;
         }
         const input_information = informationPubkeyParse(args);
+        if (input_information instanceof Error) {
+            return input_information;
+        }
         const new_information = { ...old_information, ...input_information };
         const store_new_information = informationPubkeyStringify(new_information);
         await this.kv.set(["relay_information"], store_new_information);
