@@ -30,7 +30,7 @@ const test_auth_event = async () => {
         content: "",
     });
     return btoa(JSON.stringify(event));
-}
+};
 
 // Need to keep consistent with resolvers/nip11.ts
 const not_modifiable_information = {
@@ -41,7 +41,6 @@ const not_modifiable_information = {
 
 Deno.test("main", async (t) => {
     const relay = await run({
-        password: "123",
         port: 8080,
         default_information: {
             pubkey: test_ctx.publicKey.bech32(),
@@ -220,7 +219,11 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
 
     await t.step("get relay information", async () => {
         const information = await relay.get_relay_information();
-        assertEquals(information, { name: "Nostr Relay", ...not_modifiable_information });
+        assertEquals(information, {
+            name: "Nostr Relay",
+            pubkey: test_ctx.publicKey.bech32(),
+            ...not_modifiable_information,
+        });
     });
 
     await t.step("set relay information", async () => {
@@ -229,7 +232,11 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
         });
 
         const information2 = await relay.get_relay_information();
-        assertEquals(information2, { name: "Nostr Relay2", ...not_modifiable_information });
+        assertEquals(information2, {
+            name: "Nostr Relay2",
+            pubkey: test_ctx.publicKey.bech32(),
+            ...not_modifiable_information,
+        });
     });
 
     await t.step("graphql get relay information", async () => {
@@ -240,7 +247,7 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
             icon: null,
             contact: null,
             description: null,
-            pubkey: null,
+            pubkey: test_ctx.publicKey.bech32(),
             ...not_modifiable_information,
         });
     });
@@ -256,7 +263,7 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
             icon: null,
             contact: null,
             description: null,
-            pubkey: null,
+            pubkey: test_ctx.publicKey.bech32(),
             ...not_modifiable_information,
         });
     });

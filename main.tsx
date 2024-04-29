@@ -51,7 +51,6 @@ export type Relay = {
 export async function run(args: {
     port: number;
     admin?: PublicKey;
-    password?: string;
     default_information?: RelayInformation;
     default_policy: DefaultPolicy;
     kv?: Deno.Kv;
@@ -190,7 +189,6 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
 
 const graphql_handler = (
     args: {
-        password?: string;
         kv: Deno.Kv;
         policyStore: PolicyStore;
         relayInformationStore: RelayInformationStore;
@@ -200,18 +198,11 @@ async (req: Request) => {
     if (req.method == "POST") {
         try {
             const query = await req.json();
-            if (!args.password) {
-                const cookies = getCookies(req.headers);
-                const token = cookies.token;
-                const body = await verifyToken(token, args.relayInformationStore);
-                if (!body.success) {
-                    return new Response(JSON.stringify(body), { status: 200 });
-                }
-            } else {
-                const password = req.headers.get("password");
-                if (password != args.password) {
-                    return new Response(`{"errors":"password not correct"}`);
-                }
+            const cookies = getCookies(req.headers);
+            const token = cookies.token;
+            const body = await verifyToken(token, args.relayInformationStore);
+            if (!body.success) {
+                return new Response(JSON.stringify(body), { status: 200 });
             }
             const result = await gql.graphql({
                 schema: schema,
