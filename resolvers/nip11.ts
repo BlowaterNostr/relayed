@@ -5,7 +5,7 @@ type RelayInfomationBase = {
     description?: string;
     contact?: string;
     icon?: string;
-}
+};
 
 export type RelayInformationStringify = {
     pubkey?: string;
@@ -47,7 +47,8 @@ export class RelayInformationStore {
     }
 
     resolveRelayInformation = async (): Promise<RelayInformation | Error> => {
-        const store_information_i = (await this.kv.get<RelayInformationStringify>(["relay_information"])).value;
+        const store_information_i =
+            (await this.kv.get<RelayInformationStringify>(["relay_information"])).value;
         if (!store_information_i) {
             return { ...this.default_information, ...not_modifiable_information };
         }

@@ -284,7 +284,7 @@ async function queryGql(relay: Relay, query: string, variables?: object) {
     const res = await fetch(`http://${hostname}:${port}/api`, {
         method: "POST",
         headers: {
-            "cookie": `token="${test_auth_event()}`,
+            "cookie": `token="${await test_auth_event()}`,
             "Content-Type": "application/json",
         },
         body: JSON.stringify({ query, variables }),
