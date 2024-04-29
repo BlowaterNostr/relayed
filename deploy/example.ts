@@ -8,7 +8,6 @@ const relay = await run({
     default_information: {
         name: "Relayed Example",
         description: "A lightweight relay written in Deno.",
-        pubkey: "public key",
         contact: "",
         icon: "",
     },
