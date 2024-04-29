@@ -244,9 +244,9 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
         const json = await queryGql(relay, query);
         assertEquals(json.data.relayInformation, {
             name: "Nostr Relay2",
-            icon: undefined,
-            contact: undefined,
-            description: undefined,
+            icon: null,
+            contact: null,
+            description: null,
             pubkey: test_ctx.publicKey,
             ...not_modifiable_information,
         });
@@ -260,9 +260,9 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
         const json = await queryGql(relay, query, variables);
         assertEquals(json.data.set_relay_information, {
             name: "Nostr Relay3",
-            icon: undefined,
-            contact: undefined,
-            description: undefined,
+            icon: null,
+            contact: null,
+            description: null,
             pubkey: test_ctx.publicKey,
             ...not_modifiable_information,
         });

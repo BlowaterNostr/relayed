@@ -1,20 +1,19 @@
 import { PublicKey } from "../_libs.ts";
 
-export type RelayInformationStringify = {
+type RelayInfomationBase = {
     name?: string;
     description?: string;
-    pubkey?: string;
     contact?: string;
     icon?: string;
 }
 
+export type RelayInformationStringify = {
+    pubkey?: string;
+} & RelayInfomationBase;
+
 export type RelayInformationParsed = {
-    name?: string;
-    description?: string;
     pubkey?: PublicKey;
-    contact?: string;
-    icon?: string;
-}
+} & RelayInfomationBase;
 
 export type RelayInformation = {
     name?: string;
@@ -77,18 +76,18 @@ export class RelayInformationStore {
 
 export function informationPubkeyParse(info: RelayInformationStringify): RelayInformationParsed | Error {
     if (!info.pubkey) {
-        return { name: info.name, description: info.description, contact: info.contact, icon: info.icon };
+        return info as RelayInfomationBase;
     }
     const pubkey = PublicKey.FromString(info.pubkey);
     if (pubkey instanceof Error) {
         return pubkey;
     }
-    return {  ...info, pubkey };
+    return { ...info, pubkey };
 }
 
 export function informationPubkeyStringify(info: RelayInformationParsed): RelayInformationStringify {
     if (!info.pubkey) {
-        return { name: info.name, description: info.description, contact: info.contact, icon: info.icon };
+        return info as RelayInfomationBase;
     }
     return { ...info, pubkey: info.pubkey.hex };
 }
