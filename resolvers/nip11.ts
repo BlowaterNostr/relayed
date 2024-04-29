@@ -1,9 +1,17 @@
 import { PublicKey } from "../_libs.ts";
 
-export type RelayInformationSave = {
+export type RelayInformationStringify = {
     name?: string;
     description?: string;
     pubkey?: string;
+    contact?: string;
+    icon?: string;
+}
+
+export type RelayInformationParsed = {
+    name?: string;
+    description?: string;
+    pubkey?: PublicKey;
     contact?: string;
     icon?: string;
 }
@@ -40,34 +48,44 @@ export class RelayInformationStore {
     }
 
     resolveRelayInformation = async (): Promise<RelayInformation | Error> => {
-        const store_information_i = (await this.kv.get<RelayInformationSave>(["relay_information"])).value;
-        if(!store_information_i) {
+        const store_information_i = (await this.kv.get<RelayInformationStringify>(["relay_information"])).value;
+        if (!store_information_i) {
             return { ...this.default_information, ...not_modifiable_information };
         }
-        if (!store_information_i.pubkey) {
-            return { ...this.default_information, ...{ name: store_information_i.name, contact: store_information_i.contact, description: store_information_i.description, icon: store_information_i.icon }, ...not_modifiable_information };
+        const store_information = informationPubkeyParse(store_information_i);
+        if (store_information instanceof Error) {
+            return store_information;
         }
-        const get_relay_information_pubkey = PublicKey.FromString(store_information_i.pubkey);
-        if (get_relay_information_pubkey instanceof Error) {
-            return get_relay_information_pubkey
-        }
-        const store_infomation = {
-            ...store_information_i,
-            pubkey: get_relay_information_pubkey,
-        }
-        return { ...this.default_information, ...store_infomation, ...not_modifiable_information };
+        return { ...this.default_information, ...store_information, ...not_modifiable_information };
     };
 
-    set_relay_information = async (args: RelayInformationSave) => {
+    set_relay_information = async (args: RelayInformationStringify): Promise<RelayInformation | Error> => {
         const old_information = await this.resolveRelayInformation();
         if (old_information instanceof Error) {
             return old_information;
         }
-        const new_information = {...old_information, ...args};
-        if (new_information.pubkey instanceof PublicKey) {
-            new_information.pubkey = new_information.pubkey.hex
-        }
-        await this.kv.set(["relay_information"], new_information);
+        const input_information = informationPubkeyParse(args);
+        const new_information = { ...old_information, ...input_information };
+        const store_new_information = informationPubkeyStringify(new_information);
+        await this.kv.set(["relay_information"], store_new_information);
         return { ...new_information, ...not_modifiable_information };
     };
+}
+
+export function informationPubkeyParse(info: RelayInformationStringify): RelayInformationParsed | Error {
+    if (!info.pubkey) {
+        return { name: info.name, description: info.description, contact: info.contact, icon: info.icon };
+    }
+    const pubkey = PublicKey.FromString(info.pubkey);
+    if (pubkey instanceof Error) {
+        return pubkey;
+    }
+    return {  ...info, pubkey };
+}
+
+export function informationPubkeyStringify(info: RelayInformationParsed): RelayInformationStringify {
+    if (!info.pubkey) {
+        return { name: info.name, description: info.description, contact: info.contact, icon: info.icon };
+    }
+    return { ...info, pubkey: info.pubkey.hex };
 }

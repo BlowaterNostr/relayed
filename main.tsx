@@ -15,7 +15,7 @@ import {
 } from "./resolvers/event.ts";
 import Landing from "./routes/landing.tsx";
 import Error404 from "./routes/_404.tsx";
-import { RelayInformation, RelayInformationStore } from "./resolvers/nip11.ts";
+import { RelayInformation, RelayInformationStore, RelayInformationStringify, informationPubkeyStringify } from "./resolvers/nip11.ts";
 import {
     EventStore,
     func_GetEventsByFilter,
@@ -43,10 +43,8 @@ export type Relay = {
         block?: Set<string>;
     }) => Promise<Policy | Error>;
     get_policy: (kind: NostrKind) => Promise<Policy>;
-    set_relay_information: (
-        args: { name?: string; description?: string; pubkey?: string; contact?: string; icon?: string },
-    ) => Promise<RelayInformation>;
-    get_relay_information: () => Promise<RelayInformation>;
+    set_relay_information: (args: RelayInformationStringify) => Promise<RelayInformation | Error>;
+    get_relay_information: () => Promise<RelayInformation | Error>;
     default_policy: DefaultPolicy;
 };
 
@@ -247,7 +245,7 @@ const information_handler = async (args: { relayInformationStore: RelayInformati
     if(storeInformation instanceof Error) {
         return new Response(render(Error404()), { status: 404 });
     }
-    const information = { ...storeInformation, pubkey: storeInformation.pubkey.bech32()}
+    const information = informationPubkeyStringify(storeInformation)
     const resp = new Response(JSON.stringify(information), {
         status: 200,
     });
