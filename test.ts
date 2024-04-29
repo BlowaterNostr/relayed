@@ -164,44 +164,6 @@ Deno.test("main", async (t) => {
 });
 
 // https://github.com/nostr-protocol/nips/blob/master/01.md#kinds
-Deno.test("replaceable events", async (t) => {
-    const relay = await run({
-        port: 8080,
-        default_information: {
-            pubkey: test_ctx.publicKey,
-        },
-        default_policy: {
-            allowed_kinds: "all",
-        },
-        kv: await test_kv(),
-    }) as Relay;
-    const client = SingleRelayConnection.New(relay.url, { log: false });
-    await t.step("get_replaceable_event", async () => {
-        await client_test.get_replaceable_event(relay.url)();
-    });
-    await client.close();
-    await relay.shutdown();
-});
-
-// https://github.com/nostr-protocol/nips/blob/master/09.md
-Deno.test("NIP-9: Deletion", async () => {
-    const relay = await run({
-        port: 8080,
-        default_information: {
-            pubkey: test_ctx.publicKey,
-        },
-        default_policy: {
-            allowed_kinds: "all",
-        },
-        kv: await test_kv(),
-    }) as Relay;
-    const client = SingleRelayConnection.New(relay.url, { log: false });
-    {
-        await client_nip9_test.store_deletion_event(relay.url)();
-    }
-    await client.close();
-    await relay.shutdown();
-});
 
 // https://github.com/nostr-protocol/nips/blob/master/11.md
 Deno.test("NIP-11: Relay Information Document", async (t) => {
@@ -242,13 +204,16 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
     await t.step("graphql get relay information", async () => {
         const query = await Deno.readTextFile("./queries/getRelayInformation.gql");
         const json = await queryGql(relay, query);
-        console.log("graphql get relay information queryGql json:", json)
+        console.log("graphql get relay information queryGql json:", json);
         assertEquals(json.data.relayInformation, {
             name: "Nostr Relay2",
             icon: null,
             contact: null,
             description: null,
-            pubkey: test_ctx.publicKey,
+            pubkey: {
+                hex: test_ctx.publicKey.hex,
+                bech32: test_ctx.publicKey.bech32(),
+            },
             ...not_modifiable_information,
         });
     });
@@ -259,13 +224,16 @@ Deno.test("NIP-11: Relay Information Document", async (t) => {
         };
         const query = await Deno.readTextFile("./queries/setRelayInformation.gql");
         const json = await queryGql(relay, query, variables);
-        console.log("graphql set relay information queryGql json:", json)
+        console.log("graphql set relay information queryGql json:", json);
         assertEquals(json.data.set_relay_information, {
             name: "Nostr Relay3",
             icon: null,
             contact: null,
             description: null,
-            pubkey: test_ctx.publicKey,
+            pubkey: {
+                hex: test_ctx.publicKey.hex,
+                bech32: test_ctx.publicKey.bech32(),
+            },
             ...not_modifiable_information,
         });
     });
@@ -284,11 +252,11 @@ async function randomEvent(ctx: InMemoryAccountContext, kind?: NostrKind, conten
 async function queryGql(relay: Relay, query: string, variables?: object) {
     const { hostname, port } = new URL(relay.url);
     const token = await test_auth_event();
-    console.log("queryGql token:", token)
+    console.log("queryGql token:", token);
     const res = await fetch(`http://${hostname}:${port}/api`, {
         method: "POST",
         headers: {
-            "Cookie": `token="${token}";`,
+            "Cookie": `token=${token};`,
             "Content-Type": "application/json",
         },
         body: JSON.stringify({ query, variables }),

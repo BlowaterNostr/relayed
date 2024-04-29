@@ -206,7 +206,9 @@ async (req: Request) => {
             if (!token) {
                 return new Response(`{"errors":"no token"}`);
             }
+            console.log(`get token: ${token}`);
             const event = JSON.parse(atob(token));
+            console.log(`get event: ${JSON.stringify(event)}`);
             const body = await verifyToken(event, args.relayInformationStore);
             if (!body.success) {
                 return new Response(`{"errors":"${body.error}"}`);
