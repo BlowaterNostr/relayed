@@ -284,10 +284,11 @@ async function randomEvent(ctx: InMemoryAccountContext, kind?: NostrKind, conten
 async function queryGql(relay: Relay, query: string, variables?: object) {
     const { hostname, port } = new URL(relay.url);
     const token = await test_auth_event();
+    console.log("queryGql token:", token)
     const res = await fetch(`http://${hostname}:${port}/api`, {
         method: "POST",
         headers: {
-            "Cookie": `token="${token}"`,
+            "Cookie": `token="${token}";`,
             "Content-Type": "application/json",
         },
         body: JSON.stringify({ query, variables }),
