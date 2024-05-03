@@ -66,7 +66,7 @@ export class PolicyStore {
             write?: boolean;
             allow?: Set<string>;
             block?: Set<string>;
-        } | Policy,
+        },
     ) => {
         const policy = await this.resolvePolicyByKind(args.kind);
         if (args.read != undefined) {

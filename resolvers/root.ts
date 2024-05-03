@@ -57,20 +57,18 @@ export function RootResolver(deps: {
             args: { pubkey: string[] | undefined; kind: NostrKind; offset: number; limit: number },
         ) => {
             return {
-                count: async () => {
-                    if (args.pubkey != undefined) {
-                        const events = await Array.fromAsync(
-                            deps.get_events_by_authors(new Set(args.pubkey)),
-                        );
-                        return events.length;
-                    } else if (args.kind != undefined) {
-                        const events = await Array.fromAsync(
-                            deps.get_events_by_kinds(new Set([args.kind])),
-                        );
-                        return events.length;
-                    } else {
-                        return deps.get_event_count();
-                    }
+                count_total: async () => {
+                    return Array.from(await deps.get_event_count()).reduce((pre, cur) => {
+                        return pre + cur[1];
+                    }, 0);
+                },
+                count_per_kind: async () => {
+                    return Array.from(await deps.get_event_count()).map((r) => {
+                        return {
+                            kind: r[0],
+                            count: r[1],
+                        };
+                    });
                 },
             };
         },

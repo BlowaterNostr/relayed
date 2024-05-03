@@ -33,7 +33,7 @@ const not_modifiable_information: {
 } = {
     software: "https://github.com/BlowaterNostr/relayed",
     supported_nips: [1, 2, 11],
-    version: "RC5",
+    version: "e7a31790786ec55e2fef69d916967cea1cd70ac3",
 };
 
 export class RelayInformationStore {

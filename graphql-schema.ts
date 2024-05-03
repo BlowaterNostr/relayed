@@ -23,8 +23,13 @@ export const typeDefs = gql`
   }
 
   type Events {
-    count: Int!
+    count_total: Int!
+    count_per_kind: [CountPerKind!]!
     data: [Event]
+  }
+  type CountPerKind {
+    kind: Int
+    count: Int!
   }
   type Event {
     id: String!

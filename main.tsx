@@ -5,7 +5,7 @@ import { RootResolver } from "./resolvers/root.ts";
 import * as gql from "https://esm.sh/graphql@16.8.1";
 import { Policy } from "./resolvers/policy.ts";
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
-import { NostrEvent, NostrKind, PublicKey, verifyEvent } from "./_libs.ts";
+import { NostrEvent, NostrKind, parseJSON, PublicKey, verifyEvent } from "./_libs.ts";
 import { PolicyStore } from "./resolvers/policy.ts";
 import { Policies } from "./resolvers/policy.ts";
 import {
@@ -33,6 +33,7 @@ import {
 } from "./resolvers/event.ts";
 import { Cookie, getCookies, setCookie } from "https://deno.land/std@0.224.0/http/cookie.ts";
 import { sleep } from "https://raw.githubusercontent.com/BlowaterNostr/csp/master/csp.ts";
+import { Event_V2 } from "./events.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -49,8 +50,10 @@ export type Relay = {
         read?: boolean | undefined;
         write?: boolean | undefined;
         block?: Set<string>;
+        allow?: Set<string>;
     }) => Promise<Policy | Error>;
     get_policy: (kind: NostrKind) => Promise<Policy>;
+    get_event: (id: string) => Promise<NostrEvent | null>;
     set_relay_information: (args: {
         name?: string;
         description?: string;
@@ -64,11 +67,12 @@ export type Relay = {
 const ENV_relayed_pubkey = "relayed_pubkey";
 
 export async function run(args: {
-    port: number;
+    port?: number;
     admin?: PublicKey;
     default_policy: DefaultPolicy;
     default_information?: RelayInformationStringify;
     kv?: Deno.Kv;
+    _debug?: boolean;
 }): Promise<Error | Relay> {
     // argument checking
     if (args.kv == undefined) {
@@ -91,7 +95,7 @@ export async function run(args: {
         return admin_pubkey;
     }
 
-    const { port, default_policy } = args;
+    const { default_policy } = args;
     ///////////////
     const connections = new Map<WebSocket, SubscriptionMap>();
     let resolve_hostname;
@@ -111,6 +115,8 @@ export async function run(args: {
 
     const eventStore = await EventStore.New(args.kv);
 
+    const port = args.port || 8000;
+    delete args.port;
     const server = Deno.serve(
         {
             port,
@@ -136,6 +142,7 @@ export async function run(args: {
             policyStore,
             relayInformationStore,
             kv: args.kv,
+            _debug: args._debug ? true : false,
         }),
     );
 
@@ -150,6 +157,7 @@ export async function run(args: {
         get_policy: policyStore.resolvePolicyByKind,
         set_relay_information: relayInformationStore.set_relay_information,
         get_relay_information: relayInformationStore.resolveRelayInformation,
+        get_event: eventStore.get_event,
         default_policy: args.default_policy,
     };
 }
@@ -174,10 +182,13 @@ const root_handler = (
         policyStore: PolicyStore;
         relayInformationStore: RelayInformationStore;
         kv: Deno.Kv;
+        _debug: boolean;
     } & EventReadWriter,
 ) =>
 async (req: Request, info: Deno.ServeHandlerInfo) => {
-    console.log(req);
+    if (args._debug) {
+        console.log(req);
+    }
     const { pathname, protocol } = new URL(req.url);
     if (pathname === "/api/auth/login") {
         const body = await req.json();
@@ -207,15 +218,37 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
         return graphql_handler(args)(req);
     }
     if (pathname == "/") {
-        if (protocol == "http:" || protocol == "https:") {
-            if (req.headers.get("accept")?.includes("text/html")) {
-                return landing_handler(args);
+        if (req.method == "GET") {
+            if (protocol == "http:" || protocol == "https:") {
+                if (req.headers.get("accept")?.includes("text/html")) {
+                    return landing_handler(args);
+                }
+                if (req.headers.get("accept")?.includes("application/nostr+json")) {
+                    return information_handler(args);
+                } else {
+                    return ws_handler(args)(req, info);
+                }
             }
-            if (req.headers.get("accept")?.includes("application/nostr+json")) {
-                return information_handler(args);
+        } else if (req.method == "POST") {
+            const text = await req.text();
+            const event = parseJSON<Event_V2>(text);
+            if (event instanceof Error) {
+                return new Response(event.message, {
+                    status: 400,
+                });
+            }
+            if (event.kind == "CreateChannel") {
+                const result = await args.kv.set(["event_v2", event.kind, event.name], event);
+                if (result.ok) {
+                    return new Response();
+                } else {
+                    return new Response("failed to write event", { status: 400 });
+                }
+            } else if (event.kind == "EditChannel") {
+            } else {
+                return new Response(`not a recognizable event`, { status: 400 });
             }
         }
-        return ws_handler(args)(req, info);
     }
     const resp = new Response(render(Error404()), { status: 404 });
     resp.headers.set("content-type", "html");

@@ -153,7 +153,7 @@ async function handle_cmd_event(args: {
                 );
             }
         } else {
-            if (!policy.allow.has(author.bech32())) {
+            if (!policy.allow.has(author.bech32()) && !policy.allow.has(author.hex)) {
                 return send(
                     this_socket,
                     JSON.stringify(
@@ -202,7 +202,8 @@ async function handle_cmd_event(args: {
             connections,
         )
     ) {
-        if (policy.read === false) {
+        const pub = PublicKey.FromHex(event.pubkey) as PublicKey;
+        if (policy.read == false && !policy.allow.has(event.pubkey) && !policy.allow.has(pub.bech32())) {
             return;
         }
         send_event_to_subscription(matched.socket, event, matched.sub_id, matched.filter);

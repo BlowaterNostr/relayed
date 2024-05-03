@@ -9,6 +9,7 @@ import {
 } from "../_libs.ts";
 import { EventReadWriter } from "../main.tsx";
 import { assertEquals } from "https://deno.land/std@0.202.0/assert/assert_equals.ts";
+import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
 
 export type func_GetEventsByIDs = (ids: Set<string>) => AsyncIterable<NostrEvent>;
 export type interface_GetEventsByIDs = {
@@ -36,7 +37,7 @@ export type func_GetReplaceableEvents = (args: {
 }) => AsyncIterable<NostrEvent>;
 
 export type func_MarkEventDeleted = (event: NostrEvent | NoteID) => Promise<boolean>;
-export type func_GetEventCount = () => Promise<number>;
+export type func_GetEventCount = () => Promise<Map<NostrKind, number>>;
 
 export class EventStore implements EventReadWriter {
     private constructor(
@@ -55,7 +56,16 @@ export class EventStore implements EventReadWriter {
     }
 
     get_event_count: func_GetEventCount = async () => {
-        return this.events.size;
+        const count_per_kind = new Map<NostrKind, number>();
+        for (const event of this.events.values()) {
+            const per_kind = count_per_kind.get(event.kind);
+            if (per_kind) {
+                count_per_kind.set(event.kind, per_kind + 1);
+            } else {
+                count_per_kind.set(event.kind, 1);
+            }
+        }
+        return count_per_kind;
     };
 
     async *get_events_by_authors(authors: Set<string>): AsyncIterable<NostrEvent> {
@@ -81,6 +91,11 @@ export class EventStore implements EventReadWriter {
             }
         }
     }
+
+    get_event = async (id: string) => {
+        const entry = await this.kv.get<NostrEvent>(["event", id]);
+        return entry.value;
+    };
 
     async *get_events_by_kinds(kinds: Set<NostrKind>) {
         for (const event of this.events.values()) {
@@ -134,10 +149,6 @@ export class EventStore implements EventReadWriter {
             return e as Error;
         }
 
-        if (result.ok) {
-            this.events.set(event.id, event);
-        }
-
         return result.ok;
     };
 
@@ -156,10 +167,6 @@ export class EventStore implements EventReadWriter {
             result = await op.commit();
         } catch (e) {
             return e as Error;
-        }
-
-        if (result.ok) {
-            this.events.set(event.id, event);
         }
 
         return result.ok;
