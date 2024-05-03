@@ -177,7 +177,7 @@ async function handle_cmd_event(args: {
         }
     }
 
-    let ok: boolean;
+    let ok: boolean | Error;
     if (
         event.kind == NostrKind.META_DATA || event.kind == NostrKind.CONTACTS ||
         (10000 <= event.kind && event.kind < 20000)
@@ -187,7 +187,11 @@ async function handle_cmd_event(args: {
         ok = await args.write_regular_event(event);
     }
 
-    if (ok) {
+    if (ok instanceof Error) {
+        console.error(ok);
+        send(this_socket, JSON.stringify(respond_ok(event, false, ok.message)));
+        return;
+    } else if (ok) {
         send(this_socket, JSON.stringify(respond_ok(event, true, "")));
     } else {
         send(this_socket, JSON.stringify(respond_ok(event, false, "")));

@@ -27,9 +27,9 @@ export type interface_GetEventsByAuthors = {
 
 export type func_GetEventsByFilter = (filter: NostrFilter) => AsyncIterable<NostrEvent>;
 
-export type func_WriteRegularEvent = (event: NostrEvent) => Promise<boolean>;
+export type func_WriteRegularEvent = (event: NostrEvent) => Promise<boolean | Error>;
 
-export type func_WriteReplaceableEvent = (event: NostrEvent) => Promise<boolean>;
+export type func_WriteReplaceableEvent = (event: NostrEvent) => Promise<boolean | Error>;
 export type func_GetReplaceableEvents = (args: {
     kinds: NostrKind[];
     authors: string[];
@@ -122,11 +122,17 @@ export class EventStore implements EventReadWriter {
             return false;
         }
         console.log("write_event", event);
-        const result = await this.kv.atomic()
+        const op = this.kv.atomic()
             .set(["event", event.id], event)
             .set(["event", event.kind, event.id], event)
-            .set(["event", event.pubkey, event.id], event)
-            .commit();
+            .set(["event", event.pubkey, event.id], event);
+
+        let result: Deno.KvCommitResult | Deno.KvCommitError;
+        try {
+            result = await op.commit();
+        } catch (e) {
+            return e as Error;
+        }
 
         if (result.ok) {
             this.events.set(event.id, event);
@@ -141,10 +147,16 @@ export class EventStore implements EventReadWriter {
             return false;
         }
         console.log("write_replaceable_event", event);
-        const result = await this.kv.atomic()
+        const op = this.kv.atomic()
             .set(["event", event.kind, event.pubkey], event)
-            .set(["event", event.pubkey, event.kind], event)
-            .commit();
+            .set(["event", event.pubkey, event.kind], event);
+
+        let result: Deno.KvCommitResult | Deno.KvCommitError;
+        try {
+            result = await op.commit();
+        } catch (e) {
+            return e as Error;
+        }
 
         if (result.ok) {
             this.events.set(event.id, event);
