@@ -17,7 +17,7 @@ import {
     SubscriptionStream,
 } from "./_libs.ts";
 import * as client_test from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/relay-single-test.ts";
-import { ChannelCreation } from "./events.ts";
+import { ChannelCreation, ChannelEdition } from "./events.ts";
 import { Kind_V2 } from "./events.ts";
 
 const test_kv = async () => {
@@ -241,24 +241,50 @@ Deno.test({
         }) as Relay;
 
         {
-            // create the channel
             const pri = PrivateKey.Generate();
-            const event = await sign_event_v2(pri, {
-                pubkey: pri.toPublicKey().hex,
+            const pub = pri.toPublicKey().hex;
+            // create the channel
+            const ChannelCreation_event = await sign_event_v2(pri, {
+                pubkey: pub,
                 kind: Kind_V2.ChannelCreation,
                 name: "test",
                 scope: "server",
             });
             const r = await fetch(`${relay.http_url}`, {
                 method: "POST",
-                body: JSON.stringify(event),
+                body: JSON.stringify(ChannelCreation_event),
             });
-            const result = await r.text();
-            console.log(r.statusText, result);
+            await r.text();
+            assertEquals(r.status, 200);
 
             // get the channel
-            const chan = await relay.get_channel("test");
-            assertEquals(chan, event);
+            const chan = await relay.get_channel(ChannelCreation_event.id);
+            assertEquals(chan, {
+                create: ChannelCreation_event as ChannelCreation,
+                edit: undefined,
+            });
+
+            // edit the channel
+            const event_edit = await sign_event_v2(pri, {
+                pubkey: pub,
+                kind: Kind_V2.ChannelEdition,
+                channel_id: ChannelCreation_event.id,
+                name: "test2",
+                scope: "server",
+            });
+            const r2 = await fetch(`${relay.http_url}`, {
+                method: "POST",
+                body: JSON.stringify(event_edit),
+            });
+
+            assertEquals(r2.status, 200, await r2.text());
+
+            // get the channel
+            const chan2 = await relay.get_channel(ChannelCreation_event.id);
+            assertEquals(chan2, {
+                create: ChannelCreation_event as ChannelCreation,
+                edit: event_edit as ChannelEdition,
+            });
         }
         await relay.shutdown();
     },

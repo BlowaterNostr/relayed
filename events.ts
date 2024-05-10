@@ -17,9 +17,10 @@ export type ChannelCreation = Event_Base & {
 
 // EditChannel is a different type from CreateChannel because
 // a channel only has one creator but could have multiple admin to modify it
-export type EditChannel = Event_Base & {
+export type ChannelEdition = Event_Base & {
     kind: Kind_V2.ChannelEdition;
+    channel_id: string;
     name: string;
 };
 
-export type Event_V2 = ChannelCreation | EditChannel;
+export type Event_V2 = ChannelCreation | ChannelEdition;

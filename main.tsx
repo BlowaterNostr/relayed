@@ -33,7 +33,7 @@ import {
 } from "./resolvers/event.ts";
 import { Cookie, getCookies, setCookie } from "https://deno.land/std@0.224.0/http/cookie.ts";
 import { sleep } from "https://raw.githubusercontent.com/BlowaterNostr/csp/master/csp.ts";
-import { ChannelCreation, Event_V2, Kind_V2 } from "./events.ts";
+import { ChannelCreation, ChannelEdition, Event_V2, Kind_V2 } from "./events.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -66,7 +66,12 @@ export type Relay = {
         allow?: Set<string>;
     }) => Promise<Policy | Error>;
     // channel
-    get_channel: (name: string) => Promise<ChannelCreation | null>;
+    get_channel: (id: string) => Promise<
+        {
+            create: ChannelCreation;
+            edit?: ChannelEdition;
+        } | undefined
+    >;
 };
 
 const ENV_relayed_pubkey = "relayed_pubkey";
@@ -171,9 +176,16 @@ export async function run(args: {
         // event
         get_event: eventStore.get_event,
         // channel
-        get_channel: async (name: string) => {
-            const chan = await kv_.get<ChannelCreation>(["event_v2", Kind_V2.ChannelCreation, name]);
-            return chan.value;
+        get_channel: async (id: string) => {
+            const chan = await kv_.get<ChannelCreation>(channel_creation_key(id));
+            if (chan.value == null) {
+                return undefined;
+            }
+            const chan_edit = await kv_.get<ChannelEdition>(channel_edition_key(id));
+            return {
+                create: chan.value,
+                edit: chan_edit.value || undefined,
+            };
         },
     };
 }
@@ -254,13 +266,27 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
                 });
             }
             if (event.kind == Kind_V2.ChannelCreation) {
-                const result = await args.kv.set(["event_v2", event.kind, event.name], event);
+                const result = await args.kv.set(channel_creation_key(event.id), event);
                 if (result.ok) {
                     return new Response();
                 } else {
                     return new Response("failed to write event", { status: 400 });
                 }
             } else if (event.kind == Kind_V2.ChannelEdition) {
+                const chan = await args.kv.get<ChannelCreation>(channel_creation_key(event.channel_id));
+                if (chan.value == null) {
+                    return new Response("channel does not exist", { status: 400 });
+                }
+                if (chan.value.pubkey != event.pubkey) {
+                    return new Response("you are not the creator of this channel", { status: 400 });
+                }
+
+                const result = await args.kv.set(channel_edition_key(event.channel_id), event);
+                if (result.ok) {
+                    return new Response();
+                } else {
+                    return new Response("failed to write event", { status: 400 });
+                }
             } else {
                 return new Response(`not a recognizable event`, { status: 400 });
             }
@@ -490,3 +516,10 @@ const graphiql = `
         console.log(m);
     }
 })();
+
+function channel_creation_key(id: string) {
+    return ["event_v2", Kind_V2.ChannelCreation, id];
+}
+function channel_edition_key(id: string) {
+    return ["event_v2", Kind_V2.ChannelEdition, id];
+}
