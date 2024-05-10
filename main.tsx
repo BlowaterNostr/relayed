@@ -13,7 +13,6 @@ import {
     func_GetEventsByAuthors,
     func_GetReplaceableEvents,
     func_WriteReplaceableEvent,
-    interface_GetEventsByAuthors,
 } from "./resolvers/event.ts";
 import Landing from "./routes/landing.tsx";
 import Error404 from "./routes/_404.tsx";
@@ -34,6 +33,19 @@ import {
 import { Cookie, getCookies, setCookie } from "https://deno.land/std@0.224.0/http/cookie.ts";
 import { sleep } from "https://raw.githubusercontent.com/BlowaterNostr/csp/master/csp.ts";
 import { ChannelCreation, ChannelEdition, Event_V2, Kind_V2 } from "./events.ts";
+import {
+    channel_creation_key,
+    channel_edition_key,
+    create_channel_sqlite,
+    edit_channel_kv,
+    edit_channel_sqlite,
+    get_channel_by_id_kv,
+    get_channel_by_id_sqlite,
+} from "./channel.ts";
+import { func_GetChannelByName } from "./channel.ts";
+import { func_GetChannelByID } from "./channel.ts";
+import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
+import { create_channel_kv } from "./channel.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -66,12 +78,7 @@ export type Relay = {
         allow?: Set<string>;
     }) => Promise<Policy | Error>;
     // channel
-    get_channel: (id: string) => Promise<
-        {
-            create: ChannelCreation;
-            edit?: ChannelEdition;
-        } | undefined
-    >;
+    get_channel_by_id: func_GetChannelByID;
 };
 
 const ENV_relayed_pubkey = "relayed_pubkey";
@@ -84,10 +91,32 @@ export async function run(args: {
     kv?: Deno.Kv;
     _debug?: boolean;
 }): Promise<Error | Relay> {
+    const isDenoDeploy = Deno.env.get("DENO_DEPLOYMENT_ID") !== undefined;
     // argument checking
     let kv = args.kv;
     if (kv == undefined) {
         kv = await Deno.openKv();
+    }
+
+    let db: DB | undefined;
+    let get_channel_by_id: func_GetChannelByID;
+    if (!isDenoDeploy) {
+        db = new DB("relayed.db");
+        db.execute(`
+        -- Create the table
+        CREATE TABLE IF NOT exists channels (
+            channel_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            creation_event JSON NOT NULL,
+            edition_event JSON
+        );
+
+        -- Create indexes
+        -- Index for the primary key 'id' is automatically created as it is the primary key
+        -- Create index for 'name'
+        CREATE INDEX IF NOT exists idx_name ON channels (name);
+        `);
+        get_channel_by_id = get_channel_by_id_sqlite(db);
     }
 
     let admin_pubkey: string | undefined | PublicKey | Error = args.default_information?.pubkey;
@@ -153,11 +182,14 @@ export async function run(args: {
             policyStore,
             relayInformationStore,
             kv,
+            db: db,
+            // get_channel_by_name: get_channel_by_name(db)
             _debug: args._debug ? true : false,
         }),
     );
 
-    const kv_ = kv;
+    // const get_channel_by_id = get_channel_by_id_kv(kv)
+
     return {
         server,
         ws_url: `ws://${await hostname}:${port}`,
@@ -165,6 +197,7 @@ export async function run(args: {
         shutdown: async () => {
             await server.shutdown();
             args.kv?.close();
+            db?.close();
         },
         // policy
         set_policy: policyStore.set_policy,
@@ -176,16 +209,8 @@ export async function run(args: {
         // event
         get_event: eventStore.get_event,
         // channel
-        get_channel: async (id: string) => {
-            const chan = await kv_.get<ChannelCreation>(channel_creation_key(id));
-            if (chan.value == null) {
-                return undefined;
-            }
-            const chan_edit = await kv_.get<ChannelEdition>(channel_edition_key(id));
-            return {
-                create: chan.value,
-                edit: chan_edit.value || undefined,
-            };
+        get_channel_by_id: (id: string) => {
+            return get_channel_by_id(id);
         },
     };
 }
@@ -209,7 +234,9 @@ const root_handler = (
         resolvePolicyByKind: func_ResolvePolicyByKind;
         policyStore: PolicyStore;
         relayInformationStore: RelayInformationStore;
+        // get_channel_by_name: func_GetChannelByName;
         kv: Deno.Kv;
+        db?: DB;
         _debug: boolean;
     } & EventReadWriter,
 ) =>
@@ -258,6 +285,9 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
                 }
             }
         } else if (req.method == "POST") {
+            if (!args.db) {
+                return new Response("POST is not supported in this environment", { status: 400 });
+            }
             const text = await req.text();
             const event = parseJSON<Event_V2>(text);
             if (event instanceof Error) {
@@ -266,27 +296,18 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
                 });
             }
             if (event.kind == Kind_V2.ChannelCreation) {
-                const result = await args.kv.set(channel_creation_key(event.id), event);
-                if (result.ok) {
+                const ok = await create_channel_sqlite(args.db)(event);
+                if (ok) {
                     return new Response();
                 } else {
                     return new Response("failed to write event", { status: 400 });
                 }
             } else if (event.kind == Kind_V2.ChannelEdition) {
-                const chan = await args.kv.get<ChannelCreation>(channel_creation_key(event.channel_id));
-                if (chan.value == null) {
-                    return new Response("channel does not exist", { status: 400 });
+                const res = await edit_channel_sqlite(args.db)(event);
+                if (res instanceof Error) {
+                    return new Response(res.message, { status: 400 });
                 }
-                if (chan.value.pubkey != event.pubkey) {
-                    return new Response("you are not the creator of this channel", { status: 400 });
-                }
-
-                const result = await args.kv.set(channel_edition_key(event.channel_id), event);
-                if (result.ok) {
-                    return new Response();
-                } else {
-                    return new Response("failed to write event", { status: 400 });
-                }
+                return new Response();
             } else {
                 return new Response(`not a recognizable event`, { status: 400 });
             }
@@ -305,6 +326,7 @@ const graphql_handler = (
         get_events_by_authors: func_GetEventsByAuthors;
         get_events_by_kinds: func_GetEventsByKinds;
         get_event_count: func_GetEventCount;
+        // get_channel_by_name: func_GetChannelByName;
     },
 ) =>
 async (req: Request) => {
@@ -328,7 +350,7 @@ async (req: Request) => {
                 schema: schema,
                 source: query.query,
                 variableValues: query.variables,
-                rootValue: RootResolver(args),
+                rootValue: RootResolver({ deps: args }),
             });
             return new Response(JSON.stringify(result));
         } catch (error) {
@@ -516,10 +538,3 @@ const graphiql = `
         console.log(m);
     }
 })();
-
-function channel_creation_key(id: string) {
-    return ["event_v2", Kind_V2.ChannelCreation, id];
-}
-function channel_edition_key(id: string) {
-    return ["event_v2", Kind_V2.ChannelEdition, id];
-}

@@ -258,7 +258,7 @@ Deno.test({
             assertEquals(r.status, 200);
 
             // get the channel
-            const chan = await relay.get_channel(ChannelCreation_event.id);
+            const chan = await relay.get_channel_by_id(ChannelCreation_event.id);
             assertEquals(chan, {
                 create: ChannelCreation_event as ChannelCreation,
                 edit: undefined,
@@ -280,7 +280,7 @@ Deno.test({
             assertEquals(r2.status, 200, await r2.text());
 
             // get the channel
-            const chan2 = await relay.get_channel(ChannelCreation_event.id);
+            const chan2 = await relay.get_channel_by_id(ChannelCreation_event.id);
             assertEquals(chan2, {
                 create: ChannelCreation_event as ChannelCreation,
                 edit: event_edit as ChannelEdition,
