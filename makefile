@@ -6,4 +6,6 @@ fmt:
 
 test: fmt
 	deno test --allow-net --unstable-kv --allow-read --allow-write \
-		--coverage test.ts
+		--coverage \
+		--filter $(filter) \
+		test.ts

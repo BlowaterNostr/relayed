@@ -9,12 +9,16 @@ import {
     NostrEvent,
     NostrKind,
     prepareNormalNostrEvent,
+    PrivateKey,
     RelayRejectedEvent,
     RelayResponse_Event,
+    sign_event_v2,
     SingleRelayConnection,
     SubscriptionStream,
 } from "./_libs.ts";
 import * as client_test from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/relay-single-test.ts";
+import { ChannelCreation } from "./events.ts";
+import { Kind_V2 } from "./events.ts";
 
 const test_kv = async () => {
     try {
@@ -64,7 +68,7 @@ Deno.test({
 
         // relay logic
         const ctx = InMemoryAccountContext.Generate();
-        const client = SingleRelayConnection.New(relay.url, { log: false });
+        const client = SingleRelayConnection.New(relay.ws_url, { log: false });
 
         {
             // because default policy allows no kinds
@@ -153,13 +157,13 @@ Deno.test({
         });
 
         await t.step("client_test", async () => {
-            await client_test.limit(relay.url)();
-            await client_test.no_event(relay.url)();
-            await client_test.newSub_multiple_filters(relay.url)();
-            await client_test.two_clients_communicate(relay.url)();
-            await client_test.get_event_by_id(relay.url)();
-            await client_test.close_sub_keep_reading(relay.url)();
-            await client_test.get_correct_kind(relay.url)();
+            await client_test.limit(relay.ws_url)();
+            await client_test.no_event(relay.ws_url)();
+            await client_test.newSub_multiple_filters(relay.ws_url)();
+            await client_test.two_clients_communicate(relay.ws_url)();
+            await client_test.get_event_by_id(relay.ws_url)();
+            await client_test.close_sub_keep_reading(relay.ws_url)();
+            await client_test.get_correct_kind(relay.ws_url)();
         });
 
         await client.close();
@@ -189,7 +193,7 @@ Deno.test({
         });
         if (err instanceof Error) fail(err.message);
 
-        const client = SingleRelayConnection.New(relay.url);
+        const client = SingleRelayConnection.New(relay.ws_url);
         const stream = await client.newSub("", {
             kinds: [1],
         }) as SubscriptionStream;
@@ -235,9 +239,26 @@ Deno.test({
             },
             kv: await test_kv(),
         }) as Relay;
+
         {
-            console.log(relay.url);
-            // fetch(`${relay.url}`, )
+            // create the channel
+            const pri = PrivateKey.Generate();
+            const event = await sign_event_v2(pri, {
+                pubkey: pri.toPublicKey().hex,
+                kind: Kind_V2.ChannelCreation,
+                name: "test",
+                scope: "server",
+            });
+            const r = await fetch(`${relay.http_url}`, {
+                method: "POST",
+                body: JSON.stringify(event),
+            });
+            const result = await r.text();
+            console.log(r.statusText, result);
+
+            // get the channel
+            const chan = await relay.get_channel("test");
+            assertEquals(chan, event);
         }
         await relay.shutdown();
     },
@@ -331,7 +352,7 @@ async function randomEvent(ctx: InMemoryAccountContext, kind?: NostrKind, conten
 }
 
 async function queryGql(relay: Relay, query: string, variables?: object) {
-    const { hostname, port } = new URL(relay.url);
+    const { hostname, port } = new URL(relay.ws_url);
     const token = await test_auth_event();
     const res = await fetch(`http://${hostname}:${port}/api`, {
         method: "POST",

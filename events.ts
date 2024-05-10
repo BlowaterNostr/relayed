@@ -4,8 +4,13 @@ type Event_Base = {
     sig: string;
 };
 
-export type CreateChannel = Event_Base & {
-    kind: "CreateChannel";
+export enum Kind_V2 {
+    ChannelCreation = "ChannelCreation",
+    ChannelEdition = "ChannelEdition",
+}
+
+export type ChannelCreation = Event_Base & {
+    kind: Kind_V2.ChannelCreation;
     name: string;
     scope: "server";
 };
@@ -13,8 +18,8 @@ export type CreateChannel = Event_Base & {
 // EditChannel is a different type from CreateChannel because
 // a channel only has one creator but could have multiple admin to modify it
 export type EditChannel = Event_Base & {
-    kind: "EditChannel";
+    kind: Kind_V2.ChannelEdition;
     name: string;
 };
 
-export type Event_V2 = CreateChannel | EditChannel;
+export type Event_V2 = ChannelCreation | EditChannel;
