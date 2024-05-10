@@ -27,4 +27,4 @@ jobs:
         uses: denoland/setup-deno@v1
 
       - name: Run tests
-        run: deno task test
+        run: make test
