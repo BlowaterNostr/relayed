@@ -5,15 +5,15 @@ import { RootResolver } from "./resolvers/root.ts";
 import * as gql from "https://esm.sh/graphql@16.8.1";
 import { Policy } from "./resolvers/policy.ts";
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
-import { NostrEvent, NostrKind, parseJSON, PublicKey, verifyEvent } from "./_libs.ts";
+import { NostrEvent, NostrKind, parseJSON, PublicKey, verify_event_v2, verifyEvent } from "./_libs.ts";
 import { PolicyStore } from "./resolvers/policy.ts";
 import { Policies } from "./resolvers/policy.ts";
 import {
+    event_v1_schema_sqlite,
     func_GetEventCount,
     func_GetEventsByAuthors,
     func_GetReplaceableEvents,
     func_WriteReplaceableEvent,
-    interface_GetEventsByAuthors,
 } from "./resolvers/event.ts";
 import Landing from "./routes/landing.tsx";
 import Error404 from "./routes/_404.tsx";
@@ -24,7 +24,7 @@ import {
     RelayInformationStringify,
 } from "./resolvers/nip11.ts";
 import {
-    EventStore,
+    Event_V1_Store,
     func_GetEventsByFilter,
     func_GetEventsByIDs,
     func_GetEventsByKinds,
@@ -33,7 +33,15 @@ import {
 } from "./resolvers/event.ts";
 import { Cookie, getCookies, setCookie } from "https://deno.land/std@0.224.0/http/cookie.ts";
 import { sleep } from "https://raw.githubusercontent.com/BlowaterNostr/csp/master/csp.ts";
-import { Event_V2 } from "./events.ts";
+import { Event_V2, Kind_V2 } from "./events.ts";
+import {
+    create_channel_sqlite,
+    edit_channel_sqlite,
+    get_channel_by_id_sqlite,
+    sqlite_schema,
+} from "./channel.ts";
+import { func_GetChannelByID } from "./channel.ts";
+import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -43,16 +51,10 @@ export type DefaultPolicy = {
 
 export type Relay = {
     server: Deno.HttpServer;
-    url: string;
+    ws_url: string;
+    http_url: string;
     shutdown: () => Promise<void>;
-    set_policy: (args: {
-        kind: NostrKind;
-        read?: boolean | undefined;
-        write?: boolean | undefined;
-        block?: Set<string>;
-        allow?: Set<string>;
-    }) => Promise<Policy | Error>;
-    get_policy: (kind: NostrKind) => Promise<Policy>;
+
     get_event: (id: string) => Promise<NostrEvent | null>;
     set_relay_information: (args: {
         name?: string;
@@ -61,7 +63,18 @@ export type Relay = {
         icon?: string;
     }) => Promise<RelayInformation | Error>;
     get_relay_information: () => Promise<RelayInformation | Error>;
+    // policy
     default_policy: DefaultPolicy;
+    get_policy: (kind: NostrKind) => Promise<Policy>;
+    set_policy: (args: {
+        kind: NostrKind;
+        read?: boolean | undefined;
+        write?: boolean | undefined;
+        block?: Set<string>;
+        allow?: Set<string>;
+    }) => Promise<Policy | Error>;
+    // channel
+    get_channel_by_id: func_GetChannelByID;
 };
 
 const ENV_relayed_pubkey = "relayed_pubkey";
@@ -74,9 +87,19 @@ export async function run(args: {
     kv?: Deno.Kv;
     _debug?: boolean;
 }): Promise<Error | Relay> {
+    const isDenoDeploy = Deno.env.get("DENO_DEPLOYMENT_ID") !== undefined;
     // argument checking
-    if (args.kv == undefined) {
-        args.kv = await Deno.openKv();
+    let kv = args.kv;
+    if (kv == undefined) {
+        kv = await Deno.openKv();
+    }
+
+    let db: DB | undefined;
+    let get_channel_by_id: func_GetChannelByID;
+    if (!isDenoDeploy) {
+        db = new DB("relayed.db");
+        db.execute(`${sqlite_schema}${event_v1_schema_sqlite}`);
+        get_channel_by_id = get_channel_by_id_sqlite(db);
     }
 
     let admin_pubkey: string | undefined | PublicKey | Error = args.default_information?.pubkey;
@@ -103,17 +126,17 @@ export async function run(args: {
         resolve_hostname = resolve;
     });
 
-    const get_all_policies = Policies(args.kv);
-    const policyStore = new PolicyStore(default_policy, args.kv, await get_all_policies());
+    const get_all_policies = Policies(kv);
+    const policyStore = new PolicyStore(default_policy, kv, await get_all_policies());
     const relayInformationStore = new RelayInformationStore(
-        args.kv,
+        kv,
         {
             ...args.default_information,
             pubkey: admin_pubkey,
         },
     );
 
-    const eventStore = await EventStore.New(args.kv);
+    const eventStore = await Event_V1_Store.New(kv);
 
     const port = args.port || 8000;
     delete args.port;
@@ -141,24 +164,37 @@ export async function run(args: {
             write_replaceable_event: eventStore.write_replaceable_event,
             policyStore,
             relayInformationStore,
-            kv: args.kv,
+            kv,
+            db: db,
+            // get_channel_by_name: get_channel_by_name(db)
             _debug: args._debug ? true : false,
         }),
     );
 
+    // const get_channel_by_id = get_channel_by_id_kv(kv)
+
     return {
         server,
-        url: `ws://${await hostname}:${port}`,
+        ws_url: `ws://${await hostname}:${port}`,
+        http_url: `http://${await hostname}:${port}`,
         shutdown: async () => {
             await server.shutdown();
             args.kv?.close();
+            db?.close();
         },
+        // policy
         set_policy: policyStore.set_policy,
         get_policy: policyStore.resolvePolicyByKind,
+        default_policy: args.default_policy,
+        // info
         set_relay_information: relayInformationStore.set_relay_information,
         get_relay_information: relayInformationStore.resolveRelayInformation,
+        // event
         get_event: eventStore.get_event,
-        default_policy: args.default_policy,
+        // channel
+        get_channel_by_id: (id: string) => {
+            return get_channel_by_id(id);
+        },
     };
 }
 
@@ -181,7 +217,9 @@ const root_handler = (
         resolvePolicyByKind: func_ResolvePolicyByKind;
         policyStore: PolicyStore;
         relayInformationStore: RelayInformationStore;
+        // get_channel_by_name: func_GetChannelByName;
         kv: Deno.Kv;
+        db?: DB;
         _debug: boolean;
     } & EventReadWriter,
 ) =>
@@ -230,6 +268,9 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
                 }
             }
         } else if (req.method == "POST") {
+            if (!args.db) {
+                return new Response("POST is not supported in this environment", { status: 400 });
+            }
             const text = await req.text();
             const event = parseJSON<Event_V2>(text);
             if (event instanceof Error) {
@@ -237,14 +278,23 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
                     status: 400,
                 });
             }
-            if (event.kind == "CreateChannel") {
-                const result = await args.kv.set(["event_v2", event.kind, event.name], event);
-                if (result.ok) {
+            const ok = await verify_event_v2(event);
+            if (!ok) {
+                return new Response("event is not valid", { status: 400 });
+            }
+            if (event.kind == Kind_V2.ChannelCreation) {
+                const ok = await create_channel_sqlite(args.db)(event);
+                if (ok) {
                     return new Response();
                 } else {
                     return new Response("failed to write event", { status: 400 });
                 }
-            } else if (event.kind == "EditChannel") {
+            } else if (event.kind == Kind_V2.ChannelEdition) {
+                const res = await edit_channel_sqlite(args.db)(event);
+                if (res instanceof Error) {
+                    return new Response(res.message, { status: 400 });
+                }
+                return new Response();
             } else {
                 return new Response(`not a recognizable event`, { status: 400 });
             }
@@ -263,6 +313,7 @@ const graphql_handler = (
         get_events_by_authors: func_GetEventsByAuthors;
         get_events_by_kinds: func_GetEventsByKinds;
         get_event_count: func_GetEventCount;
+        // get_channel_by_name: func_GetChannelByName;
     },
 ) =>
 async (req: Request) => {
@@ -286,7 +337,7 @@ async (req: Request) => {
                 schema: schema,
                 source: query.query,
                 variableValues: query.variables,
-                rootValue: RootResolver(args),
+                rootValue: RootResolver({ deps: args }),
             });
             return new Response(JSON.stringify(result));
         } catch (error) {

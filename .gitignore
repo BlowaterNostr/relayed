@@ -10,4 +10,5 @@ deploy/default.ts
 *cov_profile*
 coverage
 test.sqlite
+*.db
 node_modules

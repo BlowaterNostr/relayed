@@ -1,7 +1,4 @@
 {
-    "tasks": {
-        "test": "deno test --allow-net --unstable --allow-read --allow-write --coverage test.ts"
-    },
     "lint": {
         "rules": {
             "tags": [
