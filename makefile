@@ -16,3 +16,7 @@ test: fmt
 		--coverage \
 		# --filter $(filter) \
 		test.ts
+
+cov:
+	deno coverage coverage --html
+	file_server -p 4508 coverage/html

@@ -3,13 +3,11 @@ import { run } from "https://raw.githubusercontent.com/BlowaterNostr/relayed/mai
 const relay = await run({
     port: 8080,
     default_policy: {
-        allowed_kinds: "all", // or none,
+        allowed_kinds: "none", // or none,
     },
     default_information: {
-        name: "Relayed Example",
-        description: "A lightweight relay written in Deno.",
-        contact: "",
-        icon: "",
+        name: "Relayed",
+        description: "A lightweight relay written in Deno",
     },
 });
 if (relay instanceof Error) {

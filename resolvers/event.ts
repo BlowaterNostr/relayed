@@ -39,7 +39,7 @@ export type func_GetReplaceableEvents = (args: {
 export type func_MarkEventDeleted = (event: NostrEvent | NoteID) => Promise<boolean>;
 export type func_GetEventCount = () => Promise<Map<NostrKind, number>>;
 
-export class EventStore implements EventReadWriter {
+export class Event_V1_Store implements EventReadWriter {
     private constructor(
         private events: Map<string, NostrEvent>,
         private kv: Deno.Kv,
@@ -52,7 +52,7 @@ export class EventStore implements EventReadWriter {
             const event = entry.value;
             events.set(event.id, event);
         }
-        return new EventStore(events, kv);
+        return new Event_V1_Store(events, kv);
     }
 
     get_event_count: func_GetEventCount = async () => {
@@ -213,6 +213,27 @@ function isMatched(event: NostrEvent, filter: NostrFilter) {
         (kinds.length == 0 && authors.length == 0 && ids.length == 0 &&
             ps.length == 0 && es.length == 0);
 }
+
+export const event_v1_schema_sqlite = `
+CREATE TABLE IF NOT exists events_v1 (
+    id         TEXT    PRIMARY KEY,
+    pubkey     TEXT    NOT NULL,
+    kind       INTEGER NOT NULL,
+    content    TEXT    NOT NULL,
+    created_at INTEGER NOT NULL,
+    event      JSON    NOT NULL
+);
+`;
+
+// export const get_events_with_filter = (db: DB) => (filter: NostrFilter) => {
+//     db.query<[string] >(`
+//     SELECT event FROM events_v1
+//     WHERE id IN (:ids)
+//         AND pubkey IN (:authors)
+//         AND kind IN (:kinds);
+//     `, filter)
+
+// }
 
 Deno.test("isMatched", async () => {
     const ctx = InMemoryAccountContext.Generate();

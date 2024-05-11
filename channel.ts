@@ -101,3 +101,18 @@ export const get_channel_by_id_sqlite = (db: DB): func_GetChannelByID => async (
 
 //     return;
 // };
+
+export const sqlite_schema = `
+-- Create the table
+CREATE TABLE IF NOT exists channels (
+    channel_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    creation_event JSON NOT NULL,
+    edition_event JSON
+);
+
+-- Create indexes
+-- Index for the primary key 'id' is automatically created as it is the primary key
+-- Create index for 'name'
+CREATE INDEX IF NOT exists idx_name ON channels (name);
+`;

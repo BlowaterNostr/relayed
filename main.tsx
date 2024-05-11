@@ -5,10 +5,11 @@ import { RootResolver } from "./resolvers/root.ts";
 import * as gql from "https://esm.sh/graphql@16.8.1";
 import { Policy } from "./resolvers/policy.ts";
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
-import { NostrEvent, NostrKind, parseJSON, PublicKey, verifyEvent } from "./_libs.ts";
+import { NostrEvent, NostrKind, parseJSON, PublicKey, verify_event_v2, verifyEvent } from "./_libs.ts";
 import { PolicyStore } from "./resolvers/policy.ts";
 import { Policies } from "./resolvers/policy.ts";
 import {
+    event_v1_schema_sqlite,
     func_GetEventCount,
     func_GetEventsByAuthors,
     func_GetReplaceableEvents,
@@ -23,7 +24,7 @@ import {
     RelayInformationStringify,
 } from "./resolvers/nip11.ts";
 import {
-    EventStore,
+    Event_V1_Store,
     func_GetEventsByFilter,
     func_GetEventsByIDs,
     func_GetEventsByKinds,
@@ -32,20 +33,15 @@ import {
 } from "./resolvers/event.ts";
 import { Cookie, getCookies, setCookie } from "https://deno.land/std@0.224.0/http/cookie.ts";
 import { sleep } from "https://raw.githubusercontent.com/BlowaterNostr/csp/master/csp.ts";
-import { ChannelCreation, ChannelEdition, Event_V2, Kind_V2 } from "./events.ts";
+import { Event_V2, Kind_V2 } from "./events.ts";
 import {
-    channel_creation_key,
-    channel_edition_key,
     create_channel_sqlite,
-    edit_channel_kv,
     edit_channel_sqlite,
-    get_channel_by_id_kv,
     get_channel_by_id_sqlite,
+    sqlite_schema,
 } from "./channel.ts";
-import { func_GetChannelByName } from "./channel.ts";
 import { func_GetChannelByID } from "./channel.ts";
 import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
-import { create_channel_kv } from "./channel.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -102,20 +98,7 @@ export async function run(args: {
     let get_channel_by_id: func_GetChannelByID;
     if (!isDenoDeploy) {
         db = new DB("relayed.db");
-        db.execute(`
-        -- Create the table
-        CREATE TABLE IF NOT exists channels (
-            channel_id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            creation_event JSON NOT NULL,
-            edition_event JSON
-        );
-
-        -- Create indexes
-        -- Index for the primary key 'id' is automatically created as it is the primary key
-        -- Create index for 'name'
-        CREATE INDEX IF NOT exists idx_name ON channels (name);
-        `);
+        db.execute(`${sqlite_schema}${event_v1_schema_sqlite}`);
         get_channel_by_id = get_channel_by_id_sqlite(db);
     }
 
@@ -153,7 +136,7 @@ export async function run(args: {
         },
     );
 
-    const eventStore = await EventStore.New(kv);
+    const eventStore = await Event_V1_Store.New(kv);
 
     const port = args.port || 8000;
     delete args.port;
@@ -294,6 +277,10 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
                 return new Response(event.message, {
                     status: 400,
                 });
+            }
+            const ok = await verify_event_v2(event);
+            if (!ok) {
+                return new Response("event is not valid", { status: 400 });
             }
             if (event.kind == Kind_V2.ChannelCreation) {
                 const ok = await create_channel_sqlite(args.db)(event);
