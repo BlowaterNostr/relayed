@@ -187,10 +187,22 @@ export class Event_V1_Store implements EventReadWriter, DeletedEventIDs {
         } else {
             id = event_or_id.id;
         }
+
+        // delete the event
+        const events = this.get_events_by_IDs(new Set([id]));
+        for await (const event of events) {
+            const keys = regular_event_keys(event);
+            await this.kv.delete(keys[0]);
+            await this.kv.delete(keys[1]);
+            await this.kv.delete(keys[2]);
+        }
+
+        // record deleted event id
         const result = await this.kv.set(deletion_key(id), id);
         if (result.ok) {
             this.events.delete(id);
         }
+
         return result.ok;
     };
 
