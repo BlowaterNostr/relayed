@@ -3,13 +3,21 @@ import { SubscriptionMap, ws_handler } from "./ws.ts";
 import { render } from "https://esm.sh/preact-render-to-string@6.4.1";
 import { RootResolver } from "./resolvers/root.ts";
 import * as gql from "https://esm.sh/graphql@16.8.1";
-import { Policy } from "./resolvers/policy.ts";
+import { func_GetRelayMembers, Policy } from "./resolvers/policy.ts";
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
-import { NostrEvent, NostrKind, parseJSON, PublicKey, verify_event_v2, verifyEvent } from "./_libs.ts";
+import {
+    NostrEvent,
+    NostrKind,
+    parseJSON,
+    PrivateKey,
+    PublicKey,
+    verify_event_v2,
+    verifyEvent,
+} from "./_libs.ts";
 import { PolicyStore } from "./resolvers/policy.ts";
 import { Policies } from "./resolvers/policy.ts";
 import {
-    event_v1_schema_sqlite,
+    event_schema_sqlite,
     func_DeleteEventsFromPubkey,
     func_GetDeletedEventIDs,
     func_GetEventCount,
@@ -44,6 +52,7 @@ import {
 } from "./channel.ts";
 import { func_GetChannelByID } from "./channel.ts";
 import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
+import { get_relay_members } from "./resolvers/policy.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -86,24 +95,30 @@ export async function run(args: {
     admin?: PublicKey;
     default_policy: DefaultPolicy;
     default_information?: RelayInformationStringify;
+    system_key: string | PrivateKey;
     kv?: Deno.Kv;
     _debug?: boolean;
 }): Promise<Error | Relay> {
     const isDenoDeploy = Deno.env.get("DENO_DEPLOYMENT_ID") !== undefined;
+
+    //------------------
     // argument checking
+    // Deno KV
     let kv = args.kv;
     if (kv == undefined) {
         kv = await Deno.openKv();
     }
 
+    // SQLite Database
     let db: DB | undefined;
     let get_channel_by_id: func_GetChannelByID;
     if (!isDenoDeploy) {
         db = new DB("relayed.db");
-        db.execute(`${sqlite_schema}${event_v1_schema_sqlite}`);
+        db.execute(`${sqlite_schema}${event_schema_sqlite}`);
         get_channel_by_id = get_channel_by_id_sqlite(db);
     }
 
+    // Administrator Keys
     let admin_pubkey: string | undefined | PublicKey | Error = args.default_information?.pubkey;
     if (admin_pubkey == undefined) {
         const env_pubkey = Deno.env.get(ENV_relayed_pubkey);
@@ -120,6 +135,17 @@ export async function run(args: {
         return admin_pubkey;
     }
 
+    // Relay Key
+    let system_key: string | PrivateKey | Error = args.system_key;
+    if (typeof system_key == "string") {
+        system_key = PrivateKey.FromString(system_key);
+        if (system_key instanceof Error) {
+            return system_key;
+        }
+    }
+    // argument checking done
+    //-----------------------
+
     const { default_policy } = args;
     ///////////////
     const connections = new Map<WebSocket, SubscriptionMap>();
@@ -129,7 +155,13 @@ export async function run(args: {
     });
 
     const get_all_policies = Policies(kv);
-    const policyStore = new PolicyStore(default_policy, kv, await get_all_policies());
+    const policyStore = new PolicyStore({
+        default_policy,
+        kv,
+        system_account: system_key,
+        initial_policies: await get_all_policies(),
+        db,
+    });
     const relayInformationStore = new RelayInformationStore(
         kv,
         {
@@ -168,6 +200,7 @@ export async function run(args: {
             write_replaceable_event: eventStore.write_replaceable_event,
             policyStore,
             relayInformationStore,
+            get_relay_members: get_relay_members(db),
             kv,
             db: db,
             // get_channel_by_name: get_channel_by_name(db)
@@ -224,6 +257,7 @@ const root_handler = (
         policyStore: PolicyStore;
         relayInformationStore: RelayInformationStore;
         // get_channel_by_name: func_GetChannelByName;
+        get_relay_members: func_GetRelayMembers;
         kv: Deno.Kv;
         db?: DB;
         _debug: boolean;
@@ -323,6 +357,7 @@ const graphql_handler = (
         delete_event: func_DeleteEvent;
         delete_events_from_pubkey: func_DeleteEventsFromPubkey;
         get_deleted_event_ids: func_GetDeletedEventIDs;
+        get_relay_members: func_GetRelayMembers;
     },
 ) =>
 async (req: Request) => {

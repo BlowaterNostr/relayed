@@ -281,13 +281,20 @@ function isMatched(event: NostrEvent, filter: NostrFilter) {
             ps.length == 0 && es.length == 0);
 }
 
-export const event_v1_schema_sqlite = `
+export const event_schema_sqlite = `
 CREATE TABLE IF NOT exists events_v1 (
     id         TEXT    PRIMARY KEY,
     pubkey     TEXT    NOT NULL,
     kind       INTEGER NOT NULL,
     content    TEXT    NOT NULL,
     created_at INTEGER NOT NULL,
+    event      JSON    NOT NULL
+);
+
+CREATE TABLE IF NOT exists events_v2 (
+    id         TEXT    PRIMARY KEY,
+    pubkey     TEXT    NOT NULL,
+    kind       TEXT    NOT NULL,
     event      JSON    NOT NULL
 );
 `;

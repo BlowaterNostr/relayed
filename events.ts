@@ -7,6 +7,7 @@ type Event_Base = {
 export enum Kind_V2 {
     ChannelCreation = "ChannelCreation",
     ChannelEdition = "ChannelEdition",
+    RelayMember = "RelayMember",
 }
 
 export type ChannelCreation = Event_Base & {
@@ -21,6 +22,12 @@ export type ChannelEdition = Event_Base & {
     kind: Kind_V2.ChannelEdition;
     channel_id: string;
     name: string;
+};
+
+export type EventRelayMembers = Event_Base & {
+    kind: Kind_V2.RelayMember;
+    created_at: number;
+    members: string[]; // the pubkey of members
 };
 
 export type Event_V2 = ChannelCreation | ChannelEdition;

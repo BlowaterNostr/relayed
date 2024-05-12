@@ -1,4 +1,4 @@
-import { PolicyStore } from "./policy.ts";
+import { func_GetRelayMembers, PolicyStore } from "./policy.ts";
 import { Policies } from "./policy.ts";
 import { RelayInformationStore } from "./nip11.ts";
 import {
@@ -24,6 +24,7 @@ export function RootResolver({ deps }: {
         delete_event: func_DeleteEvent;
         delete_events_from_pubkey: func_DeleteEventsFromPubkey;
         get_deleted_event_ids: func_GetDeletedEventIDs;
+        get_relay_members: func_GetRelayMembers;
     };
 }) {
     return {
@@ -41,6 +42,7 @@ function Queries(deps: {
     get_events_by_kinds: func_GetEventsByKinds;
     // get_channel_by_name: func_GetChannelByName;
     get_deleted_event_ids: func_GetDeletedEventIDs;
+    get_relay_members: func_GetRelayMembers;
 }) {
     return {
         policies: Policies(deps.kv),
@@ -69,6 +71,17 @@ function Queries(deps: {
         },
         deleted_events: async () => {
             return deps.get_deleted_event_ids();
+        },
+        members: async () => {
+            const members = await deps.get_relay_members();
+            if (members instanceof Error) {
+                console.error(members);
+                throw members;
+            }
+            if (members == undefined) {
+                return [];
+            }
+            return members.members;
         },
     };
 }
