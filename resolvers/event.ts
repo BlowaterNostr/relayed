@@ -39,7 +39,12 @@ export type func_GetReplaceableEvents = (args: {
 export type func_DeleteEvent = (event: NostrEvent | NoteID | string) => Promise<boolean>;
 export type func_GetEventCount = () => Promise<Map<NostrKind, number>>;
 
-export class Event_V1_Store implements EventReadWriter {
+export type func_GetDeletedEventIDs = () => Promise<string[]>;
+interface DeletedEventIDs {
+    get_deleted_event_ids: func_GetDeletedEventIDs;
+}
+
+export class Event_V1_Store implements EventReadWriter, DeletedEventIDs {
     private constructor(
         private events: Map<string, NostrEvent>,
         private kv: Deno.Kv,
@@ -137,10 +142,11 @@ export class Event_V1_Store implements EventReadWriter {
             return false;
         }
         console.log("write_event", event);
+        const keys = regular_event_keys(event);
         const op = this.kv.atomic()
-            .set(["event", event.id], event)
-            .set(["event", event.kind, event.id], event)
-            .set(["event", event.pubkey, event.id], event);
+            .set(keys[0], event)
+            .set(keys[1], event)
+            .set(keys[2], event);
 
         let result: Deno.KvCommitResult | Deno.KvCommitError;
         try {
@@ -181,12 +187,39 @@ export class Event_V1_Store implements EventReadWriter {
         } else {
             id = event_or_id.id;
         }
-        const result = await this.kv.set(["event", "deleted", id], id);
+        const result = await this.kv.set(deletion_key(id), id);
         if (result.ok) {
             this.events.delete(id);
         }
         return result.ok;
     };
+
+    get_deleted_event_ids = async () => {
+        const list = this.kv.list<string>({
+            prefix: deletion_key_prefix(),
+        });
+        const ids = [] as string[];
+        for await (const entry of list) {
+            ids.push(entry.value);
+        }
+        return ids;
+    };
+}
+
+function regular_event_keys(event: NostrEvent) {
+    return [
+        ["event", event.id],
+        ["event", event.kind, event.id],
+        ["event", event.pubkey, event.id],
+    ];
+}
+
+function deletion_key_prefix() {
+    return ["event", "deleted"];
+}
+
+function deletion_key(id: string) {
+    return [...deletion_key_prefix(), id];
 }
 
 export function isReplaceableEvent(kind: NostrKind) {

@@ -1,10 +1,15 @@
 import { PolicyStore } from "./policy.ts";
 import { Policies } from "./policy.ts";
 import { RelayInformationStore } from "./nip11.ts";
-import { Event_V1_Store, func_DeleteEvent, func_GetEventCount, func_GetEventsByAuthors } from "./event.ts";
+import {
+    Event_V1_Store,
+    func_DeleteEvent,
+    func_GetDeletedEventIDs,
+    func_GetEventCount,
+    func_GetEventsByAuthors,
+} from "./event.ts";
 import { NostrKind } from "../_libs.ts";
 import { func_GetEventsByKinds } from "./event.ts";
-import { func_GetChannelByName } from "../channel.ts";
 
 export function RootResolver({ deps }: {
     deps: {
@@ -16,6 +21,7 @@ export function RootResolver({ deps }: {
         get_events_by_kinds: func_GetEventsByKinds;
         // get_channel_by_name: func_GetChannelByName;
         delete_event: func_DeleteEvent;
+        get_deleted_event_ids: func_GetDeletedEventIDs;
     };
 }) {
     return {
@@ -32,6 +38,7 @@ function Queries(deps: {
     get_event_count: func_GetEventCount;
     get_events_by_kinds: func_GetEventsByKinds;
     // get_channel_by_name: func_GetChannelByName;
+    get_deleted_event_ids: func_GetDeletedEventIDs;
 }) {
     return {
         policies: Policies(deps.kv),
@@ -57,6 +64,9 @@ function Queries(deps: {
         },
         channel: (args: { name: string }) => {
             // const channel = deps.get_channel_by_name(args.name);
+        },
+        deleted_events: async () => {
+            return deps.get_deleted_event_ids();
         },
     };
 }
