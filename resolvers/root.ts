@@ -1,7 +1,7 @@
 import { PolicyStore } from "./policy.ts";
 import { Policies } from "./policy.ts";
 import { RelayInformationStore } from "./nip11.ts";
-import { func_GetEventCount, func_GetEventsByAuthors } from "./event.ts";
+import { Event_V1_Store, func_DeleteEvent, func_GetEventCount, func_GetEventsByAuthors } from "./event.ts";
 import { NostrKind } from "../_libs.ts";
 import { func_GetEventsByKinds } from "./event.ts";
 import { func_GetChannelByName } from "../channel.ts";
@@ -15,6 +15,7 @@ export function RootResolver({ deps }: {
         get_event_count: func_GetEventCount;
         get_events_by_kinds: func_GetEventsByKinds;
         // get_channel_by_name: func_GetChannelByName;
+        delete_event: func_DeleteEvent;
     };
 }) {
     return {
@@ -60,12 +61,13 @@ function Queries(deps: {
     };
 }
 
-export const Mutation = (args: {
+export const Mutation = (deps: {
     policyStore: PolicyStore;
     relayInformationStore: RelayInformationStore;
+    delete_event: func_DeleteEvent;
     kv: Deno.Kv;
 }) => {
-    const { policyStore, relayInformationStore, kv } = args;
+    const { policyStore, relayInformationStore, kv } = deps;
     return {
         add_block: async (args: { kind: number; pubkey: string }) => {
             const policy = await policyStore.resolvePolicyByKind(args.kind);
@@ -93,5 +95,9 @@ export const Mutation = (args: {
         },
         set_policy: policyStore.set_policy,
         set_relay_information: relayInformationStore.set_relay_information,
+        delete_event: async (args: { id: string }) => {
+            const ok = await deps.delete_event(args.id);
+            console.log("|||", ok);
+        },
     };
 };

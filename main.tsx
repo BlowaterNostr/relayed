@@ -25,10 +25,10 @@ import {
 } from "./resolvers/nip11.ts";
 import {
     Event_V1_Store,
+    func_DeleteEvent,
     func_GetEventsByFilter,
     func_GetEventsByIDs,
     func_GetEventsByKinds,
-    func_MarkEventDeleted,
     func_WriteRegularEvent,
 } from "./resolvers/event.ts";
 import { Cookie, getCookies, setCookie } from "https://deno.land/std@0.224.0/http/cookie.ts";
@@ -159,7 +159,7 @@ export async function run(args: {
             get_events_by_filter: eventStore.get_events_by_filter.bind(eventStore),
             get_replaceable_events: eventStore.get_replaceable_events.bind(eventStore),
             get_event_count: eventStore.get_event_count,
-            mark_event_deleted: eventStore.mark_event_deleted,
+            delete_event: eventStore.delete_event,
             write_regular_event: eventStore.write_regular_event.bind(eventStore),
             write_replaceable_event: eventStore.write_replaceable_event,
             policyStore,
@@ -199,12 +199,12 @@ export async function run(args: {
 }
 
 export type EventReadWriter = {
+    delete_event: func_DeleteEvent;
     write_regular_event: func_WriteRegularEvent;
     write_replaceable_event: func_WriteReplaceableEvent;
     get_events_by_IDs: func_GetEventsByIDs;
     get_events_by_kinds: func_GetEventsByKinds;
     get_events_by_filter: func_GetEventsByFilter;
-    mark_event_deleted: func_MarkEventDeleted;
     get_replaceable_events: func_GetReplaceableEvents;
     get_events_by_authors: func_GetEventsByAuthors;
     get_event_count: func_GetEventCount;
@@ -314,6 +314,7 @@ const graphql_handler = (
         get_events_by_kinds: func_GetEventsByKinds;
         get_event_count: func_GetEventCount;
         // get_channel_by_name: func_GetChannelByName;
+        delete_event: func_DeleteEvent;
     },
 ) =>
 async (req: Request) => {
@@ -517,11 +518,3 @@ const graphiql = `
     </script>
   </body>
 </html>`;
-
-(async () => {
-    for (;;) {
-        await sleep(10000);
-        const m = Deno.memoryUsage();
-        console.log(m);
-    }
-})();

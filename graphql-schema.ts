@@ -21,6 +21,7 @@ export const typeDefs = gql`
     remove_allow(kind: Int, pubkey: String, ): Policy!
     set_policy(kind: Int, read: Boolean, write: Boolean): Policy!
     set_relay_information(name: String, description: String, contact: String, icon: String): RelayInformation!
+    delete_event(id: String!): Event
   }
 
   type Channel {

@@ -36,7 +36,7 @@ export type func_GetReplaceableEvents = (args: {
     authors: string[];
 }) => AsyncIterable<NostrEvent>;
 
-export type func_MarkEventDeleted = (event: NostrEvent | NoteID) => Promise<boolean>;
+export type func_DeleteEvent = (event: NostrEvent | NoteID | string) => Promise<boolean>;
 export type func_GetEventCount = () => Promise<Map<NostrKind, number>>;
 
 export class Event_V1_Store implements EventReadWriter {
@@ -172,9 +172,11 @@ export class Event_V1_Store implements EventReadWriter {
         return result.ok;
     };
 
-    mark_event_deleted = async (event_or_id: NostrEvent | NoteID) => {
+    delete_event = async (event_or_id: NostrEvent | NoteID | string) => {
         let id: string;
-        if (event_or_id instanceof NoteID) {
+        if (typeof event_or_id == "string") {
+            id = event_or_id;
+        } else if (event_or_id instanceof NoteID) {
             id = event_or_id.hex;
         } else {
             id = event_or_id.id;

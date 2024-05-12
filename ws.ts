@@ -2,7 +2,7 @@
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
 import { DefaultPolicy, EventReadWriter } from "./main.tsx";
 import {
-    func_MarkEventDeleted,
+    func_DeleteEvent,
     func_WriteRegularEvent,
     func_WriteReplaceableEvent,
     isReplaceableEvent,
@@ -122,7 +122,7 @@ async function handle_cmd_event(args: {
     resolvePolicyByKind: func_ResolvePolicyByKind;
     write_regular_event: func_WriteRegularEvent;
     write_replaceable_event: func_WriteReplaceableEvent;
-    mark_event_deleted: func_MarkEventDeleted;
+    delete_event: func_DeleteEvent;
 }) {
     const { this_socket, connections, nostr_ws_msg, resolvePolicyByKind } = args;
     const event = nostr_ws_msg[1];
@@ -170,7 +170,7 @@ async function handle_cmd_event(args: {
 
     if (event.kind == NostrKind.DELETE) {
         for (const e of getTags(event).e) {
-            const ok = await args.mark_event_deleted(NoteID.FromHex(e));
+            const ok = await args.delete_event(NoteID.FromHex(e));
             if (!ok) {
                 console.error("failed to delete", e);
             }
