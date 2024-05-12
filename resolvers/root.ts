@@ -4,6 +4,7 @@ import { RelayInformationStore } from "./nip11.ts";
 import {
     Event_V1_Store,
     func_DeleteEvent,
+    func_DeleteEventsFromPubkey,
     func_GetDeletedEventIDs,
     func_GetEventCount,
     func_GetEventsByAuthors,
@@ -21,6 +22,7 @@ export function RootResolver({ deps }: {
         get_events_by_kinds: func_GetEventsByKinds;
         // get_channel_by_name: func_GetChannelByName;
         delete_event: func_DeleteEvent;
+        delete_events_from_pubkey: func_DeleteEventsFromPubkey;
         get_deleted_event_ids: func_GetDeletedEventIDs;
     };
 }) {
@@ -75,6 +77,7 @@ export const Mutation = (deps: {
     policyStore: PolicyStore;
     relayInformationStore: RelayInformationStore;
     delete_event: func_DeleteEvent;
+    delete_events_from_pubkey: func_DeleteEventsFromPubkey;
     kv: Deno.Kv;
 }) => {
     const { policyStore, relayInformationStore, kv } = deps;
@@ -108,6 +111,9 @@ export const Mutation = (deps: {
         delete_event: async (args: { id: string }) => {
             const ok = await deps.delete_event(args.id);
             console.log("|||", ok);
+        },
+        delete_events_from_pubkey: async (args: { pubkey: string }) => {
+            return deps.delete_events_from_pubkey(args.pubkey);
         },
     };
 };

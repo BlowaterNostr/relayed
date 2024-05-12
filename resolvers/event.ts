@@ -37,6 +37,8 @@ export type func_GetReplaceableEvents = (args: {
 }) => AsyncIterable<NostrEvent>;
 
 export type func_DeleteEvent = (event: NostrEvent | NoteID | string) => Promise<boolean>;
+export type func_DeleteEventsFromPubkey = (pubkey: string | PublicKey) => Promise<string[]>;
+
 export type func_GetEventCount = () => Promise<Map<NostrKind, number>>;
 
 export type func_GetDeletedEventIDs = () => Promise<string[]>;
@@ -204,6 +206,24 @@ export class Event_V1_Store implements EventReadWriter, DeletedEventIDs {
         }
 
         return result.ok;
+    };
+
+    delete_events_from_pubkey = async (pubkey: PublicKey | string) => {
+        if (pubkey instanceof PublicKey) {
+            pubkey = pubkey.hex;
+        }
+        const events = this.get_events_by_authors(new Set([pubkey]));
+
+        const deleted = [] as string[];
+        for await (const event of events) {
+            const ok = await this.delete_event(event);
+            if (!ok) {
+                console.error(`failed to delete`, event);
+                continue;
+            }
+            deleted.push(event.id);
+        }
+        return deleted;
     };
 
     get_deleted_event_ids = async () => {

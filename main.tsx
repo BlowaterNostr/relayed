@@ -10,6 +10,7 @@ import { PolicyStore } from "./resolvers/policy.ts";
 import { Policies } from "./resolvers/policy.ts";
 import {
     event_v1_schema_sqlite,
+    func_DeleteEventsFromPubkey,
     func_GetDeletedEventIDs,
     func_GetEventCount,
     func_GetEventsByAuthors,
@@ -161,6 +162,7 @@ export async function run(args: {
             get_replaceable_events: eventStore.get_replaceable_events.bind(eventStore),
             get_event_count: eventStore.get_event_count,
             delete_event: eventStore.delete_event,
+            delete_events_from_pubkey: eventStore.delete_events_from_pubkey,
             get_deleted_event_ids: eventStore.get_deleted_event_ids,
             write_regular_event: eventStore.write_regular_event.bind(eventStore),
             write_replaceable_event: eventStore.write_replaceable_event,
@@ -202,6 +204,7 @@ export async function run(args: {
 
 export type EventReadWriter = {
     delete_event: func_DeleteEvent;
+    delete_events_from_pubkey: func_DeleteEventsFromPubkey;
     get_deleted_event_ids: func_GetDeletedEventIDs;
     write_regular_event: func_WriteRegularEvent;
     write_replaceable_event: func_WriteReplaceableEvent;
@@ -318,6 +321,7 @@ const graphql_handler = (
         get_event_count: func_GetEventCount;
         // get_channel_by_name: func_GetChannelByName;
         delete_event: func_DeleteEvent;
+        delete_events_from_pubkey: func_DeleteEventsFromPubkey;
         get_deleted_event_ids: func_GetDeletedEventIDs;
     },
 ) =>
