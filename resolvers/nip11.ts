@@ -1,10 +1,12 @@
 import { PublicKey } from "../_libs.ts";
+import { software, supported_nips } from "../main.tsx";
 
 type RelayInfomationBase = {
     name?: string;
     description?: string;
     contact?: string;
     icon?: string;
+    auth_required: boolean;
 };
 
 export type RelayInformationStringify = {
@@ -24,16 +26,7 @@ export type RelayInformation = {
     software?: string;
     version?: string;
     icon?: string;
-};
-
-const not_modifiable_information: {
-    software: string;
-    supported_nips: number[];
-    version: string;
-} = {
-    software: "https://github.com/BlowaterNostr/relayed",
-    supported_nips: [1, 2, 11],
-    version: "e7a31790786ec55e2fef69d916967cea1cd70ac3",
+    auth_required: boolean;
 };
 
 export class RelayInformationStore {
@@ -45,9 +38,13 @@ export class RelayInformationStore {
     resolveRelayInformation = async (): Promise<RelayInformation | Error> => {
         const entry = await this.kv.get<RelayInfomationBase>(["relay_information"]);
         if (!entry.value) {
-            return { ...this.default_information, ...not_modifiable_information };
+            return {
+                ...this.default_information,
+                software,
+                supported_nips,
+            };
         }
-        return { ...this.default_information, ...entry.value, ...not_modifiable_information };
+        return { ...this.default_information, ...entry.value, software, supported_nips };
     };
 
     set_relay_information = async (args: {
@@ -62,7 +59,7 @@ export class RelayInformationStore {
         }
         const new_information = { ...old_information, ...args };
         await this.kv.set(["relay_information"], new_information);
-        return { ...this.default_information, ...new_information, ...not_modifiable_information };
+        return { ...this.default_information, ...new_information, software, supported_nips };
     };
 }
 

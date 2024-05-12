@@ -1,15 +1,12 @@
-import { NoteID } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/nip19.ts";
 import {
     InMemoryAccountContext,
     NostrEvent,
     NostrFilter,
     NostrKind,
     prepareNormalNostrEvent,
-    PublicKey,
 } from "../_libs.ts";
-import { EventReadWriter } from "../main.tsx";
 import { assertEquals } from "https://deno.land/std@0.202.0/assert/assert_equals.ts";
-import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
+import { DB, SqliteError } from "https://deno.land/x/sqlite@v3.8/mod.ts";
 
 export type func_GetEventsByIDs = (ids: Set<string>) => AsyncIterable<NostrEvent>;
 export type interface_GetEventsByIDs = {
@@ -26,7 +23,7 @@ export type interface_GetEventsByAuthors = {
     get_events_by_authors: func_GetEventsByAuthors;
 };
 
-export type func_GetEventsByFilter = (filter: NostrFilter) => AsyncIterable<NostrEvent>;
+export type func_GetEventsByFilter = (filter: NostrFilter) => Promise<NostrEvent[]>;
 
 export type func_WriteRegularEvent = (event: NostrEvent) => Promise<boolean | Error>;
 
@@ -36,156 +33,7 @@ export type func_GetReplaceableEvents = (args: {
     authors: string[];
 }) => AsyncIterable<NostrEvent>;
 
-export type func_MarkEventDeleted = (event: NostrEvent | NoteID) => Promise<boolean>;
 export type func_GetEventCount = () => Promise<Map<NostrKind, number>>;
-
-export class Event_V1_Store implements EventReadWriter {
-    private constructor(
-        private events: Map<string, NostrEvent>,
-        private kv: Deno.Kv,
-    ) {}
-
-    static async New(kv: Deno.Kv) {
-        const entries = kv.list<NostrEvent>({ prefix: ["event"] });
-        const events = new Map();
-        for await (const entry of entries) {
-            const event = entry.value;
-            events.set(event.id, event);
-        }
-        return new Event_V1_Store(events, kv);
-    }
-
-    get_event_count: func_GetEventCount = async () => {
-        const count_per_kind = new Map<NostrKind, number>();
-        for (const event of this.events.values()) {
-            const per_kind = count_per_kind.get(event.kind);
-            if (per_kind) {
-                count_per_kind.set(event.kind, per_kind + 1);
-            } else {
-                count_per_kind.set(event.kind, 1);
-            }
-        }
-        return count_per_kind;
-    };
-
-    async *get_events_by_authors(authors: Set<string>): AsyncIterable<NostrEvent> {
-        const hex_keys = new Set();
-        for (const author of authors) {
-            const key = PublicKey.FromString(author);
-            if (key instanceof Error) {
-                continue;
-            }
-            hex_keys.add(key.hex);
-        }
-        for (const event of this.events.values()) {
-            if (hex_keys.has(event.pubkey)) {
-                yield event;
-            }
-        }
-    }
-
-    async *get_events_by_IDs(ids: Set<string>) {
-        for (const event of this.events.values()) {
-            if (ids.has(event.id)) {
-                yield event;
-            }
-        }
-    }
-
-    get_event = async (id: string) => {
-        const entry = await this.kv.get<NostrEvent>(["event", id]);
-        return entry.value;
-    };
-
-    async *get_events_by_kinds(kinds: Set<NostrKind>) {
-        for (const event of this.events.values()) {
-            if (kinds.has(event.kind)) {
-                yield event;
-            }
-        }
-    }
-
-    async *get_events_by_filter(filter: NostrFilter) {
-        let i = 0;
-        for (const event of this.events.values()) {
-            if (isMatched(event, filter)) {
-                if (filter.limit && i < filter.limit) {
-                    yield event;
-                }
-                i++;
-            }
-        }
-    }
-
-    async *get_replaceable_events(args: {
-        kinds: NostrKind[];
-        authors: string[];
-    }) {
-        for (const kind of args.kinds) {
-            for (const author of args.authors) {
-                const key = ["event", kind, author];
-                const entry = await this.kv.get<NostrEvent>(key);
-                if (entry.value) {
-                    yield entry.value;
-                }
-            }
-        }
-    }
-
-    write_regular_event = async (event: NostrEvent) => {
-        if (isReplaceableEvent(event.kind)) {
-            return false;
-        }
-        console.log("write_event", event);
-        const op = this.kv.atomic()
-            .set(["event", event.id], event)
-            .set(["event", event.kind, event.id], event)
-            .set(["event", event.pubkey, event.id], event);
-
-        let result: Deno.KvCommitResult | Deno.KvCommitError;
-        try {
-            result = await op.commit();
-        } catch (e) {
-            return e as Error;
-        }
-
-        return result.ok;
-    };
-
-    write_replaceable_event = async (event: NostrEvent) => {
-        const kind = event.kind;
-        if (!isReplaceableEvent(kind)) {
-            return false;
-        }
-        console.log("write_replaceable_event", event);
-        const op = this.kv.atomic()
-            .set(["event", event.kind, event.pubkey], event)
-            .set(["event", event.pubkey, event.kind], event);
-
-        let result: Deno.KvCommitResult | Deno.KvCommitError;
-        try {
-            result = await op.commit();
-        } catch (e) {
-            return e as Error;
-        }
-
-        return result.ok;
-    };
-
-    mark_event_deleted = async (event_or_id: NostrEvent | NoteID) => {
-        let id: string;
-        if (event_or_id instanceof NoteID) {
-            id = event_or_id.hex;
-        } else {
-            id = event_or_id.id;
-        }
-        const result = await this.kv.set(["event", "deleted", id], id);
-        if (result.ok) {
-            this.events.delete(id);
-        }
-        return result.ok;
-    };
-}
 
 export function isReplaceableEvent(kind: NostrKind) {
     return kind == NostrKind.META_DATA || kind == NostrKind.CONTACTS || (10000 <= kind && kind < 20000);
@@ -214,7 +62,7 @@ function isMatched(event: NostrEvent, filter: NostrFilter) {
             ps.length == 0 && es.length == 0);
 }
 
-export const event_v1_schema_sqlite = `
+export const event_schema_sqlite = `
 CREATE TABLE IF NOT exists events_v1 (
     id         TEXT    PRIMARY KEY,
     pubkey     TEXT    NOT NULL,
@@ -223,17 +71,107 @@ CREATE TABLE IF NOT exists events_v1 (
     created_at INTEGER NOT NULL,
     event      JSON    NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS replaceable_events_v1 (
+    id         TEXT    PRIMARY KEY,
+    kind       INTEGER NOT NULL,
+    pubkey     TEXT    NOT NULL,
+    content    TEXT    NOT NULL,
+    created_at INTEGER NOT NULL,
+    event      JSON    NOT NULL,
+    UNIQUE (kind, pubkey)
+);
+
+CREATE TABLE IF NOT exists events_v2 (
+    id         TEXT    PRIMARY KEY,
+    pubkey     TEXT    NOT NULL,
+    kind       TEXT    NOT NULL,
+    event      JSON    NOT NULL
+);
 `;
 
-// export const get_events_with_filter = (db: DB) => (filter: NostrFilter) => {
-//     db.query<[string] >(`
-//     SELECT event FROM events_v1
-//     WHERE id IN (:ids)
-//         AND pubkey IN (:authors)
-//         AND kind IN (:kinds);
-//     `, filter)
+export const get_events_by_filter_sqlite =
+    (db: DB): func_GetEventsByFilter => async (filter: NostrFilter) => {
+        let sql = `SELECT json(event) as event FROM events_v1 WHERE true`;
+        const params = [] as any[];
 
-// }
+        if (filter.ids && filter.ids.length > 0) {
+            sql += ` AND id IN (${filter.ids.map(() => "?").join(",")})`;
+            params.push(...filter.ids);
+        }
+
+        if (filter.authors && filter.authors.length > 0) {
+            sql += ` AND pubkey IN (${filter.authors.map(() => "?").join(",")})`;
+            params.push(...filter.authors);
+        }
+
+        if (filter.kinds && filter.kinds.length > 0) {
+            sql += ` AND kind IN (${filter.kinds.map(() => "?").join(",")})`;
+            params.push(...filter.kinds);
+        }
+
+        sql += ` ORDER BY created_at DESC LIMIT :limit `;
+        params.push(filter.limit || 200);
+
+        console.log(sql, "\n", params, "\n", filter);
+        const results = db.query<[string]>(sql, params);
+        return results.map((r) => JSON.parse(r[0]) as NostrEvent);
+    };
+
+export const write_regular_event_sqlite = (db: DB): func_WriteRegularEvent => async (event: NostrEvent) => {
+    try {
+        const result = db.query(
+            `INSERT INTO events_v1 values
+    (:id, :pubkey, :kind, :content, :created_at, :event)`,
+            {
+                id: event.id,
+                pubkey: event.pubkey,
+                kind: event.kind,
+                content: event.content,
+                created_at: event.created_at,
+                event: JSON.stringify(event),
+            },
+        );
+        console.log(result);
+        return true;
+    } catch (e) {
+        return e as SqliteError;
+    }
+};
+
+export const write_replaceable_event_sqlite =
+    (db: DB): func_WriteReplaceableEvent => async (event: NostrEvent) => {
+        try {
+            const result = db.query(
+                `INSERT INTO replaceable_events_v1 values
+                (:id, :pubkey, :kind, :content, :created_at, :event)
+                ON CONFLICT(kind, pubkey) DO UPDATE SET
+                    id = excluded.id,
+                    content = excluded.content,
+                    created_at = excluded.created_at,
+                    event = excluded.event
+                WHERE excluded.created_at > replaceable_events_v1.created_at;
+                `,
+                {
+                    id: event.id,
+                    pubkey: event.pubkey,
+                    kind: event.kind,
+                    content: event.content,
+                    created_at: event.created_at,
+                    event: JSON.stringify(event),
+                },
+            );
+            console.log(result);
+            return true;
+        } catch (e) {
+            return e as SqliteError;
+        }
+    };
+
+export const get_event_count_sqlite = (db: DB): func_GetEventCount => async () => {
+    const rows = db.query<[number, number]>(`SELECT kind, count(*) as count FROM events_v1 group by kind`);
+    return new Map(rows);
+};
 
 Deno.test("isMatched", async () => {
     const ctx = InMemoryAccountContext.Generate();

@@ -1,12 +1,7 @@
 // deno-lint-ignore-file
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
-import { DefaultPolicy, EventReadWriter } from "./main.tsx";
-import {
-    func_MarkEventDeleted,
-    func_WriteRegularEvent,
-    func_WriteReplaceableEvent,
-    isReplaceableEvent,
-} from "./resolvers/event.ts";
+import { atobSafe, DefaultPolicy } from "./main.tsx";
+import { func_WriteRegularEvent, func_WriteReplaceableEvent } from "./resolvers/event.ts";
 import {
     _RelayResponse_EOSE,
     _RelayResponse_Event,
@@ -25,14 +20,22 @@ import {
 } from "./_libs.ts";
 import { NoteID } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/nip19.ts";
 
+import { func_GetEventsByFilter } from "./resolvers/event.ts";
+import { func_DeleteEvent } from "./resolvers/event_deletion.ts";
+
 export const ws_handler = (
     args: {
         connections: Map<WebSocket, SubscriptionMap>;
         default_policy: DefaultPolicy;
         resolvePolicyByKind: func_ResolvePolicyByKind;
-    } & EventReadWriter,
+        get_events_by_filter: func_GetEventsByFilter;
+        write_regular_event: func_WriteRegularEvent;
+        write_replaceable_event: func_WriteReplaceableEvent;
+        delete_event: func_DeleteEvent;
+        auth_required: boolean;
+    },
 ) =>
-(req: Request, info: Deno.ServeHandlerInfo) => {
+async (req: Request, info: Deno.ServeHandlerInfo) => {
     const { connections } = args;
 
     if (req.headers.get("upgrade") != "websocket") {
@@ -40,9 +43,38 @@ export const ws_handler = (
     }
 
     const { socket, response } = Deno.upgradeWebSocket(req);
+    if (args.auth_required) {
+        const url = new URL(req.url);
+        const auth = url.searchParams.get("auth");
+        if (auth == null || auth == "") {
+            // https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4
+            // https://www.iana.org/assignments/websocket/websocket.xml#close-code-number
+            socket.close(3000, "no auth event found");
+            return response;
+        }
+        const rawEvent = atobSafe(auth);
+        console.log(rawEvent);
+        if (rawEvent instanceof Error) {
+            socket.close(3000, rawEvent.message);
+            return response;
+        }
+        const event = parseJSON<NostrEvent>(rawEvent);
+        if (event instanceof Error) {
+            console.error(event);
+            socket.close(3000, "invalid auth event format");
+            return response;
+        }
+        const policy = await args.resolvePolicyByKind(NostrKind.TEXT_NOTE);
+        if (!policy.allow.has(event.pubkey)) {
+            socket.close(3000, `pubkey ${event.pubkey} is not allowed`);
+            console.log("not allowed");
+            return response;
+        }
+    }
 
-    socket.onopen = ((socket: WebSocket) => (e) => {
+    socket.onopen = ((socket: WebSocket) => async (e) => {
         console.log("a client connected!", info.remoteAddr);
+
         connections.set(socket, new Map());
     })(socket);
 
@@ -84,7 +116,11 @@ function onMessage(
         connections: Map<WebSocket, SubscriptionMap>;
         default_policy: DefaultPolicy;
         resolvePolicyByKind: func_ResolvePolicyByKind;
-    } & EventReadWriter,
+        get_events_by_filter: func_GetEventsByFilter;
+        write_regular_event: func_WriteRegularEvent;
+        write_replaceable_event: func_WriteReplaceableEvent;
+        delete_event: func_DeleteEvent;
+    },
 ) {
     const { this_socket, connections } = deps;
 
@@ -122,7 +158,7 @@ async function handle_cmd_event(args: {
     resolvePolicyByKind: func_ResolvePolicyByKind;
     write_regular_event: func_WriteRegularEvent;
     write_replaceable_event: func_WriteReplaceableEvent;
-    mark_event_deleted: func_MarkEventDeleted;
+    delete_event: func_DeleteEvent;
 }) {
     const { this_socket, connections, nostr_ws_msg, resolvePolicyByKind } = args;
     const event = nostr_ws_msg[1];
@@ -170,7 +206,7 @@ async function handle_cmd_event(args: {
 
     if (event.kind == NostrKind.DELETE) {
         for (const e of getTags(event).e) {
-            const ok = await args.mark_event_deleted(NoteID.FromHex(e));
+            const ok = await args.delete_event(e);
             if (!ok) {
                 console.error("failed to delete", e);
             }
@@ -216,7 +252,8 @@ async function handle_cmd_req(
         this_socket: WebSocket;
         connections: Map<WebSocket, SubscriptionMap>;
         resolvePolicyByKind: func_ResolvePolicyByKind;
-    } & EventReadWriter,
+        get_events_by_filter: func_GetEventsByFilter;
+    },
 ) {
     const { this_socket } = args;
     const sub_id = nostr_ws_msg[1];
@@ -244,82 +281,18 @@ async function handle_cmd_req(
 
     // query this filter
     for (const filter of filters) {
-        const event_candidates = await handle_filter({ ...args, filter });
-        for (const event of event_candidates.values()) {
+        const event_candidates = await args.get_events_by_filter(filter);
+        for (const event of event_candidates) {
+            const policy = await args.resolvePolicyByKind(event.kind);
+            const pubkey = PublicKey.FromHex(event.pubkey) as PublicKey;
+            if (policy.read == false && !policy.allow.has(pubkey.hex) && !policy.allow.has(pubkey.bech32())) {
+                continue;
+            }
             send(this_socket, JSON.stringify(respond_event(sub_id, event)));
         }
     }
 
     return send(this_socket, JSON.stringify(respond_eose(sub_id)));
-}
-
-async function handle_filter(
-    args: {
-        filter: NostrFilter;
-        resolvePolicyByKind: func_ResolvePolicyByKind;
-    } & EventReadWriter,
-) {
-    const event_candidates = new Map<string, NostrEvent>();
-    const { filter, get_events_by_IDs, resolvePolicyByKind, get_events_by_kinds } = args;
-
-    if (filter.kinds) {
-        const replaceable_kinds: NostrKind[] = [];
-        for (const kind of filter.kinds) {
-            if (isReplaceableEvent(kind)) {
-                replaceable_kinds.push(kind);
-            }
-        }
-        const events = args.get_replaceable_events({
-            authors: filter.authors || [],
-            kinds: replaceable_kinds,
-        });
-        for await (const event of events) {
-            event_candidates.set(event.id, event);
-        }
-    }
-
-    if (filter.ids) {
-        const events = get_events_by_IDs(new Set(filter.ids));
-        for await (const event of events) {
-            const policy = await resolvePolicyByKind(event.kind);
-            if (policy.read == false) {
-                continue;
-            }
-            event_candidates.set(event.id, event);
-        }
-    }
-    if (filter.authors) {
-        if (event_candidates.size > 0) {
-        } else {
-            const events = args.get_events_by_authors(new Set(filter.authors));
-            for await (const event of events) {
-                event_candidates.set(event.id, event);
-            }
-        }
-    }
-    if (filter.kinds) {
-        if (event_candidates.size > 0) {
-            const keys = Array.from(event_candidates.keys());
-            for (const key of keys) {
-                const event = event_candidates.get(key) as NostrEvent;
-                if (filter.kinds.includes(event.kind)) {
-                    continue;
-                }
-                event_candidates.delete(key);
-            }
-        } else if (!filter.authors) {
-            const events = get_events_by_kinds(new Set(filter.kinds));
-            for await (const event of events) {
-                event_candidates.set(event.id, event);
-            }
-        }
-    }
-    if (filter.limit) {
-        for await (const event of args.get_events_by_filter(filter)) {
-            event_candidates.set(event.id, event);
-        }
-    }
-    return event_candidates;
 }
 
 function respond_event(

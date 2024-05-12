@@ -12,6 +12,8 @@ export const typeDefs = gql`
     policies: [Policy]
     relayInformation: RelayInformation
     channel(name: String!): Channel
+    deleted_events: [String!]!
+    members: [String!]!
   }
 
   type Mutation {
@@ -21,6 +23,8 @@ export const typeDefs = gql`
     remove_allow(kind: Int, pubkey: String, ): Policy!
     set_policy(kind: Int, read: Boolean, write: Boolean): Policy!
     set_relay_information(name: String, description: String, contact: String, icon: String): RelayInformation!
+    delete_event(id: String!): Event
+    delete_events_from_pubkey(pubkey: String!): [String!]!
   }
 
   type Channel {

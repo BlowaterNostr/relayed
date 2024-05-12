@@ -3,17 +3,25 @@ import { SubscriptionMap, ws_handler } from "./ws.ts";
 import { render } from "https://esm.sh/preact-render-to-string@6.4.1";
 import { RootResolver } from "./resolvers/root.ts";
 import * as gql from "https://esm.sh/graphql@16.8.1";
-import { Policy } from "./resolvers/policy.ts";
+import { func_GetRelayMembers, Policy } from "./resolvers/policy.ts";
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
-import { NostrEvent, NostrKind, parseJSON, PublicKey, verify_event_v2, verifyEvent } from "./_libs.ts";
+import {
+    NostrEvent,
+    NostrKind,
+    parseJSON,
+    PrivateKey,
+    PublicKey,
+    verify_event_v2,
+    verifyEvent,
+} from "./_libs.ts";
 import { PolicyStore } from "./resolvers/policy.ts";
 import { Policies } from "./resolvers/policy.ts";
 import {
-    event_v1_schema_sqlite,
+    event_schema_sqlite,
     func_GetEventCount,
-    func_GetEventsByAuthors,
-    func_GetReplaceableEvents,
     func_WriteReplaceableEvent,
+    write_regular_event_sqlite,
+    write_replaceable_event_sqlite,
 } from "./resolvers/event.ts";
 import Landing from "./routes/landing.tsx";
 import Error404 from "./routes/_404.tsx";
@@ -23,25 +31,28 @@ import {
     RelayInformationStore,
     RelayInformationStringify,
 } from "./resolvers/nip11.ts";
-import {
-    Event_V1_Store,
-    func_GetEventsByFilter,
-    func_GetEventsByIDs,
-    func_GetEventsByKinds,
-    func_MarkEventDeleted,
-    func_WriteRegularEvent,
-} from "./resolvers/event.ts";
+import { func_GetEventsByFilter, func_WriteRegularEvent } from "./resolvers/event.ts";
 import { Cookie, getCookies, setCookie } from "https://deno.land/std@0.224.0/http/cookie.ts";
-import { sleep } from "https://raw.githubusercontent.com/BlowaterNostr/csp/master/csp.ts";
 import { Event_V2, Kind_V2 } from "./events.ts";
 import {
     create_channel_sqlite,
     edit_channel_sqlite,
+    func_CreateChannel,
+    func_EditChannel,
     get_channel_by_id_sqlite,
     sqlite_schema,
 } from "./channel.ts";
 import { func_GetChannelByID } from "./channel.ts";
 import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
+import { get_relay_members } from "./resolvers/policy.ts";
+import { get_events_by_filter_sqlite } from "./resolvers/event.ts";
+import { get_event_count_sqlite } from "./resolvers/event.ts";
+import {
+    func_DeleteEvent,
+    func_DeleteEventsFromPubkey,
+    func_GetDeletedEventIDs,
+} from "./resolvers/event_deletion.ts";
+import { delete_event_sqlite } from "./resolvers/event_deletion.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -75,6 +86,7 @@ export type Relay = {
     }) => Promise<Policy | Error>;
     // channel
     get_channel_by_id: func_GetChannelByID;
+    [Symbol.asyncDispose]: () => Promise<void>;
 };
 
 const ENV_relayed_pubkey = "relayed_pubkey";
@@ -88,20 +100,27 @@ export async function run(args: {
     _debug?: boolean;
 }): Promise<Error | Relay> {
     const isDenoDeploy = Deno.env.get("DENO_DEPLOYMENT_ID") !== undefined;
+
+    //------------------
     // argument checking
+    // Deno KV
     let kv = args.kv;
     if (kv == undefined) {
         kv = await Deno.openKv();
     }
 
+    // SQLite Database
     let db: DB | undefined;
     let get_channel_by_id: func_GetChannelByID;
-    if (!isDenoDeploy) {
-        db = new DB("relayed.db");
-        db.execute(`${sqlite_schema}${event_v1_schema_sqlite}`);
-        get_channel_by_id = get_channel_by_id_sqlite(db);
-    }
+    db = new DB("relayed.db");
+    db.execute(`${sqlite_schema}${event_schema_sqlite}`);
+    get_channel_by_id = get_channel_by_id_sqlite(db);
+    const write_replaceable_event = write_replaceable_event_sqlite(db);
+    const write_regular_event = write_regular_event_sqlite(db);
+    const get_event_count = get_event_count_sqlite(db);
+    const get_events_by_filter = get_events_by_filter_sqlite(db);
 
+    // Administrator Keys
     let admin_pubkey: string | undefined | PublicKey | Error = args.default_information?.pubkey;
     if (admin_pubkey == undefined) {
         const env_pubkey = Deno.env.get(ENV_relayed_pubkey);
@@ -118,6 +137,17 @@ export async function run(args: {
         return admin_pubkey;
     }
 
+    // Relay Key
+    // let system_key: string | PrivateKey | Error = args.system_key;
+    // if (typeof system_key == "string") {
+    //     system_key = PrivateKey.FromString(system_key);
+    //     if (system_key instanceof Error) {
+    //         return system_key;
+    //     }
+    // }
+    // argument checking done
+    //-----------------------
+
     const { default_policy } = args;
     ///////////////
     const connections = new Map<WebSocket, SubscriptionMap>();
@@ -127,16 +157,21 @@ export async function run(args: {
     });
 
     const get_all_policies = Policies(kv);
-    const policyStore = new PolicyStore(default_policy, kv, await get_all_policies());
+    const policyStore = new PolicyStore({
+        default_policy,
+        kv,
+        // system_account: system_key,
+        initial_policies: await get_all_policies(),
+        db,
+    });
     const relayInformationStore = new RelayInformationStore(
         kv,
         {
             ...args.default_information,
+            auth_required: args.default_information?.auth_required || false,
             pubkey: admin_pubkey,
         },
     );
-
-    const eventStore = await Event_V1_Store.New(kv);
 
     const port = args.port || 8000;
     delete args.port;
@@ -151,37 +186,42 @@ export async function run(args: {
         },
         root_handler({
             ...args,
+            // deletion
+            delete_event: delete_event_sqlite(db),
+            delete_events_from_pubkey: async () => {
+                return [];
+            },
+            get_deleted_event_ids: async () => {
+                return [];
+            },
             connections,
             resolvePolicyByKind: policyStore.resolvePolicyByKind,
-            get_events_by_IDs: eventStore.get_events_by_IDs.bind(eventStore),
-            get_events_by_kinds: eventStore.get_events_by_kinds.bind(eventStore),
-            get_events_by_authors: eventStore.get_events_by_authors.bind(eventStore),
-            get_events_by_filter: eventStore.get_events_by_filter.bind(eventStore),
-            get_replaceable_events: eventStore.get_replaceable_events.bind(eventStore),
-            get_event_count: eventStore.get_event_count,
-            mark_event_deleted: eventStore.mark_event_deleted,
-            write_regular_event: eventStore.write_regular_event.bind(eventStore),
-            write_replaceable_event: eventStore.write_replaceable_event,
+            get_event_count,
+            get_events_by_filter,
+            write_regular_event,
+            write_replaceable_event,
             policyStore,
             relayInformationStore,
-            kv,
-            db: db,
-            // get_channel_by_name: get_channel_by_name(db)
+            get_relay_members: get_relay_members(db),
+            create_channel: create_channel_sqlite(db),
+            edit_channel: edit_channel_sqlite(db),
+            kv: kv,
             _debug: args._debug ? true : false,
         }),
     );
 
     // const get_channel_by_id = get_channel_by_id_kv(kv)
 
+    const shutdown = async () => {
+        await server.shutdown();
+        args.kv?.close();
+        db?.close();
+    };
     return {
         server,
         ws_url: `ws://${await hostname}:${port}`,
         http_url: `http://${await hostname}:${port}`,
-        shutdown: async () => {
-            await server.shutdown();
-            args.kv?.close();
-            db?.close();
-        },
+        shutdown,
         // policy
         set_policy: policyStore.set_policy,
         get_policy: policyStore.resolvePolicyByKind,
@@ -190,25 +230,21 @@ export async function run(args: {
         set_relay_information: relayInformationStore.set_relay_information,
         get_relay_information: relayInformationStore.resolveRelayInformation,
         // event
-        get_event: eventStore.get_event,
+        get_event: async (id) => {
+            const events = await get_events_by_filter({
+                ids: [id],
+            });
+            return events[0];
+        },
         // channel
         get_channel_by_id: (id: string) => {
             return get_channel_by_id(id);
         },
+        [Symbol.asyncDispose]() {
+            return shutdown();
+        },
     };
 }
-
-export type EventReadWriter = {
-    write_regular_event: func_WriteRegularEvent;
-    write_replaceable_event: func_WriteReplaceableEvent;
-    get_events_by_IDs: func_GetEventsByIDs;
-    get_events_by_kinds: func_GetEventsByKinds;
-    get_events_by_filter: func_GetEventsByFilter;
-    mark_event_deleted: func_MarkEventDeleted;
-    get_replaceable_events: func_GetReplaceableEvents;
-    get_events_by_authors: func_GetEventsByAuthors;
-    get_event_count: func_GetEventCount;
-};
 
 const root_handler = (
     args: {
@@ -218,17 +254,31 @@ const root_handler = (
         policyStore: PolicyStore;
         relayInformationStore: RelayInformationStore;
         // get_channel_by_name: func_GetChannelByName;
+        // channel
+        create_channel: func_CreateChannel;
+        edit_channel: func_EditChannel;
+        // deletion
+        delete_event: func_DeleteEvent;
+        delete_events_from_pubkey: func_DeleteEventsFromPubkey;
+        // get
+        get_deleted_event_ids: func_GetDeletedEventIDs;
+        get_events_by_filter: func_GetEventsByFilter;
+        get_event_count: func_GetEventCount;
+        // write
+        write_regular_event: func_WriteRegularEvent;
+        write_replaceable_event: func_WriteReplaceableEvent;
+        // relay
+        get_relay_members: func_GetRelayMembers;
         kv: Deno.Kv;
-        db?: DB;
         _debug: boolean;
-    } & EventReadWriter,
+    },
 ) =>
 async (req: Request, info: Deno.ServeHandlerInfo) => {
     if (args._debug) {
         console.log(req);
     }
-    const { pathname, protocol } = new URL(req.url);
-    if (pathname === "/api/auth/login") {
+    const url = new URL(req.url);
+    if (url.pathname === "/api/auth/login") {
         const body = await req.json();
         if (!body) {
             return new Response(`{"errors":"request body is null"}`, { status: 400 });
@@ -252,25 +302,30 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
             return resp;
         }
     }
-    if (pathname == "/api") {
+    if (url.pathname == "/api") {
         return graphql_handler(args)(req);
     }
-    if (pathname == "/") {
+    if (url.pathname == "/") {
         if (req.method == "GET") {
-            if (protocol == "http:" || protocol == "https:") {
+            if (url.protocol == "http:" || url.protocol == "https:") {
                 if (req.headers.get("accept")?.includes("text/html")) {
                     return landing_handler(args);
                 }
                 if (req.headers.get("accept")?.includes("application/nostr+json")) {
                     return information_handler(args);
                 } else {
-                    return ws_handler(args)(req, info);
+                    const relay_info = await args.relayInformationStore.resolveRelayInformation();
+                    if (relay_info instanceof Error) {
+                        console.error(relay_info);
+                        return new Response("", { status: 500 });
+                    }
+                    return ws_handler({
+                        ...args,
+                        auth_required: relay_info.auth_required,
+                    })(req, info);
                 }
             }
         } else if (req.method == "POST") {
-            if (!args.db) {
-                return new Response("POST is not supported in this environment", { status: 400 });
-            }
             const text = await req.text();
             const event = parseJSON<Event_V2>(text);
             if (event instanceof Error) {
@@ -283,14 +338,14 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
                 return new Response("event is not valid", { status: 400 });
             }
             if (event.kind == Kind_V2.ChannelCreation) {
-                const ok = await create_channel_sqlite(args.db)(event);
+                const ok = await args.create_channel(event);
                 if (ok) {
                     return new Response();
                 } else {
                     return new Response("failed to write event", { status: 400 });
                 }
             } else if (event.kind == Kind_V2.ChannelEdition) {
-                const res = await edit_channel_sqlite(args.db)(event);
+                const res = await args.edit_channel(event);
                 if (res instanceof Error) {
                     return new Response(res.message, { status: 400 });
                 }
@@ -307,13 +362,24 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
 
 const graphql_handler = (
     args: {
-        kv: Deno.Kv;
+        // policy
         policyStore: PolicyStore;
+        // relay info
         relayInformationStore: RelayInformationStore;
-        get_events_by_authors: func_GetEventsByAuthors;
-        get_events_by_kinds: func_GetEventsByKinds;
+        // get
+        get_events_by_filter: func_GetEventsByFilter;
         get_event_count: func_GetEventCount;
-        // get_channel_by_name: func_GetChannelByName;
+        // write
+        write_regular_event: func_WriteRegularEvent;
+        write_replaceable_event: func_WriteReplaceableEvent;
+        // deletion
+        delete_event: func_DeleteEvent;
+        delete_events_from_pubkey: func_DeleteEventsFromPubkey;
+        get_deleted_event_ids: func_GetDeletedEventIDs;
+        // relay members
+        get_relay_members: func_GetRelayMembers;
+        // kv
+        kv: Deno.Kv;
     },
 ) =>
 async (req: Request) => {
@@ -326,7 +392,18 @@ async (req: Request) => {
                 return new Response(`{"errors":"no token"}`);
             }
 
-            const event = JSON.parse(atob(token));
+            const rawEvent = atobSafe(token);
+            if (rawEvent instanceof Error) {
+                return new Response(JSON.stringify({
+                    errors: [`${rawEvent.message}`],
+                }));
+            }
+            const event = parseJSON<NostrEvent>(rawEvent);
+            if (event instanceof Error) {
+                return new Response(JSON.stringify({
+                    errors: [`${event.message}`],
+                }));
+            }
             const error = await verifyToken(event, args.relayInformationStore);
             if (error instanceof Error) {
                 return new Response(JSON.stringify({
@@ -354,7 +431,7 @@ async (req: Request) => {
     }
 };
 
-export const supported_nips = [1, 2];
+export const supported_nips = [1, 2, 11];
 export const software = "https://github.com/BlowaterNostr/relayed";
 
 const landing_handler = async (args: { relayInformationStore: RelayInformationStore }) => {
@@ -518,10 +595,10 @@ const graphiql = `
   </body>
 </html>`;
 
-(async () => {
-    for (;;) {
-        await sleep(10000);
-        const m = Deno.memoryUsage();
-        console.log(m);
+export function atobSafe(data) {
+    try {
+        return atob(data);
+    } catch (e) {
+        return e as Error;
     }
-})();
+}

@@ -1,13 +1,12 @@
 import { run } from "https://raw.githubusercontent.com/BlowaterNostr/relayed/main/main.tsx";
 
 const relay = await run({
-    port: 8080,
+    port: 8000,
     default_policy: {
-        allowed_kinds: "none", // or none,
+        allowed_kinds: "all",
     },
     default_information: {
-        name: "Relayed",
-        description: "A lightweight relay written in Deno",
+        auth_required: false,
     },
 });
 if (relay instanceof Error) {
