@@ -17,10 +17,7 @@ export function RootResolver({ deps }: {
         policyStore: PolicyStore;
         relayInformationStore: RelayInformationStore;
         kv: Deno.Kv;
-        get_events_by_authors: func_GetEventsByAuthors;
         get_event_count: func_GetEventCount;
-        get_events_by_kinds: func_GetEventsByKinds;
-        // get_channel_by_name: func_GetChannelByName;
         delete_event: func_DeleteEvent;
         delete_events_from_pubkey: func_DeleteEventsFromPubkey;
         get_deleted_event_ids: func_GetDeletedEventIDs;
@@ -37,10 +34,7 @@ function Queries(deps: {
     policyStore: PolicyStore;
     relayInformationStore: RelayInformationStore;
     kv: Deno.Kv;
-    get_events_by_authors: func_GetEventsByAuthors;
     get_event_count: func_GetEventCount;
-    get_events_by_kinds: func_GetEventsByKinds;
-    // get_channel_by_name: func_GetChannelByName;
     get_deleted_event_ids: func_GetDeletedEventIDs;
     get_relay_members: func_GetRelayMembers;
 }) {

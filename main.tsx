@@ -54,6 +54,9 @@ import {
 import { func_GetChannelByID } from "./channel.ts";
 import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
 import { get_relay_members } from "./resolvers/policy.ts";
+import { get_event_by_id } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/relay-single-test.ts";
+import { get_events_by_filter } from "./resolvers/event.ts";
+import { get_event_count_sqlite } from "./resolvers/event.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -113,11 +116,12 @@ export async function run(args: {
     // SQLite Database
     let db: DB | undefined;
     let get_channel_by_id: func_GetChannelByID;
-    if (!isDenoDeploy) {
-        db = new DB("relayed.db");
-        db.execute(`${sqlite_schema}${event_schema_sqlite}`);
-        get_channel_by_id = get_channel_by_id_sqlite(db);
-    }
+    db = new DB("relayed.db");
+    db.execute(`${sqlite_schema}${event_schema_sqlite}`);
+    get_channel_by_id = get_channel_by_id_sqlite(db);
+    const write_replaceable_event = write_replaceable_event_sqlite(db);
+    const write_regular_event = write_regular_event_sqlite(db);
+    const get_event_count = get_event_count_sqlite(db);
 
     // Administrator Keys
     let admin_pubkey: string | undefined | PublicKey | Error = args.default_information?.pubkey;
@@ -189,33 +193,13 @@ export async function run(args: {
             connections,
             resolvePolicyByKind: policyStore.resolvePolicyByKind,
             get_events_by_IDs: eventStore.get_events_by_IDs.bind(eventStore),
-            get_events_by_kinds: eventStore.get_events_by_kinds.bind(eventStore),
-            get_events_by_authors: eventStore.get_events_by_authors.bind(eventStore),
-            get_events_by_filter: eventStore.get_events_by_filter.bind(eventStore),
-            get_replaceable_events: eventStore.get_replaceable_events.bind(eventStore),
-            get_event_count: eventStore.get_event_count,
+            get_event_count,
             delete_event: eventStore.delete_event,
             delete_events_from_pubkey: eventStore.delete_events_from_pubkey,
             get_deleted_event_ids: eventStore.get_deleted_event_ids,
-            write_regular_event: async (event: NostrEvent) => {
-                if (db) {
-                    const res = await write_regular_event_sqlite(db)(event);
-                    if (res instanceof Error) {
-                        console.error(res);
-                    }
-                }
-                console.log(db);
-                return eventStore.write_regular_event(event);
-            },
-            write_replaceable_event: async (event: NostrEvent) => {
-                if (db) {
-                    const res = await write_replaceable_event_sqlite(db)(event);
-                    if (res instanceof Error) {
-                        console.error(res);
-                    }
-                }
-                return eventStore.write_replaceable_event(event);
-            },
+            get_events_by_filter: get_events_by_filter(db),
+            write_regular_event,
+            write_replaceable_event,
             policyStore,
             relayInformationStore,
             get_relay_members: get_relay_members(db),
@@ -253,20 +237,6 @@ export async function run(args: {
     };
 }
 
-export type EventReadWriter = {
-    delete_event: func_DeleteEvent;
-    delete_events_from_pubkey: func_DeleteEventsFromPubkey;
-    get_deleted_event_ids: func_GetDeletedEventIDs;
-    write_regular_event: func_WriteRegularEvent;
-    write_replaceable_event: func_WriteReplaceableEvent;
-    get_events_by_IDs: func_GetEventsByIDs;
-    get_events_by_kinds: func_GetEventsByKinds;
-    get_events_by_filter: func_GetEventsByFilter;
-    get_replaceable_events: func_GetReplaceableEvents;
-    get_events_by_authors: func_GetEventsByAuthors;
-    get_event_count: func_GetEventCount;
-};
-
 const root_handler = (
     args: {
         connections: Map<WebSocket, SubscriptionMap>;
@@ -275,11 +245,19 @@ const root_handler = (
         policyStore: PolicyStore;
         relayInformationStore: RelayInformationStore;
         // get_channel_by_name: func_GetChannelByName;
+        delete_event: func_DeleteEvent;
+        delete_events_from_pubkey: func_DeleteEventsFromPubkey;
+        get_deleted_event_ids: func_GetDeletedEventIDs;
+        write_regular_event: func_WriteRegularEvent;
+        write_replaceable_event: func_WriteReplaceableEvent;
+        get_events_by_IDs: func_GetEventsByIDs;
+        get_events_by_filter: func_GetEventsByFilter;
+        get_event_count: func_GetEventCount;
         get_relay_members: func_GetRelayMembers;
         kv: Deno.Kv;
         db?: DB;
         _debug: boolean;
-    } & EventReadWriter,
+    },
 ) =>
 async (req: Request, info: Deno.ServeHandlerInfo) => {
     if (args._debug) {
@@ -366,15 +344,22 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
 const graphql_handler = (
     args: {
         kv: Deno.Kv;
+        // policy
         policyStore: PolicyStore;
+        // relay info
         relayInformationStore: RelayInformationStore;
-        get_events_by_authors: func_GetEventsByAuthors;
-        get_events_by_kinds: func_GetEventsByKinds;
+        // get
+        get_events_by_filter: func_GetEventsByFilter;
+        get_events_by_IDs: func_GetEventsByIDs;
         get_event_count: func_GetEventCount;
-        // get_channel_by_name: func_GetChannelByName;
+        // write
+        write_regular_event: func_WriteRegularEvent;
+        write_replaceable_event: func_WriteReplaceableEvent;
+        // deletion
         delete_event: func_DeleteEvent;
         delete_events_from_pubkey: func_DeleteEventsFromPubkey;
         get_deleted_event_ids: func_GetDeletedEventIDs;
+        // relay members
         get_relay_members: func_GetRelayMembers;
     },
 ) =>

@@ -1,12 +1,11 @@
 // deno-lint-ignore-file
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
-import { DefaultPolicy, EventReadWriter } from "./main.tsx";
+import { DefaultPolicy } from "./main.tsx";
 import {
     func_DeleteEvent,
     func_WriteRegularEvent,
     func_WriteReplaceableEvent,
-    get_events_with_filter,
-    isReplaceableEvent,
+    get_events_by_filter,
 } from "./resolvers/event.ts";
 import {
     _RelayResponse_EOSE,
@@ -27,14 +26,18 @@ import {
 import { NoteID } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/nip19.ts";
 import { Database } from "jsr:@db/sqlite@0.11";
 import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
+import { func_GetEventsByFilter } from "./resolvers/event.ts";
 
 export const ws_handler = (
     args: {
         connections: Map<WebSocket, SubscriptionMap>;
         default_policy: DefaultPolicy;
         resolvePolicyByKind: func_ResolvePolicyByKind;
-        db_ffi?: Database;
-    } & EventReadWriter,
+        get_events_by_filter: func_GetEventsByFilter;
+        write_regular_event: func_WriteRegularEvent;
+        write_replaceable_event: func_WriteReplaceableEvent;
+        delete_event: func_DeleteEvent;
+    },
 ) =>
 (req: Request, info: Deno.ServeHandlerInfo) => {
     const { connections } = args;
@@ -88,8 +91,11 @@ function onMessage(
         connections: Map<WebSocket, SubscriptionMap>;
         default_policy: DefaultPolicy;
         resolvePolicyByKind: func_ResolvePolicyByKind;
-        db_ffi?: Database;
-    } & EventReadWriter,
+        get_events_by_filter: func_GetEventsByFilter;
+        write_regular_event: func_WriteRegularEvent;
+        write_replaceable_event: func_WriteReplaceableEvent;
+        delete_event: func_DeleteEvent;
+    },
 ) {
     const { this_socket, connections } = deps;
 
@@ -221,8 +227,8 @@ async function handle_cmd_req(
         this_socket: WebSocket;
         connections: Map<WebSocket, SubscriptionMap>;
         resolvePolicyByKind: func_ResolvePolicyByKind;
-        db_ffi?: Database;
-    } & EventReadWriter,
+        get_events_by_filter: func_GetEventsByFilter;
+    },
 ) {
     const { this_socket } = args;
     const sub_id = nostr_ws_msg[1];
@@ -250,10 +256,10 @@ async function handle_cmd_req(
 
     // query this filter
     for (const filter of filters) {
-        const event_candidates = await handle_filter({ ...args, filter });
+        const event_candidates = await args.get_events_by_filter(filter);
         for (const event of event_candidates) {
             const policy = await args.resolvePolicyByKind(event.kind);
-            const pubkey = PublicKey.FromHex(event.pubkey) as PublicKey
+            const pubkey = PublicKey.FromHex(event.pubkey) as PublicKey;
             if (policy.read == false && !policy.allow.has(pubkey.hex) && !policy.allow.has(pubkey.bech32())) {
                 continue;
             }
@@ -263,20 +269,6 @@ async function handle_cmd_req(
 
     return send(this_socket, JSON.stringify(respond_eose(sub_id)));
 }
-
-async function handle_filter(
-    args: {
-        filter: NostrFilter;
-        resolvePolicyByKind: func_ResolvePolicyByKind;
-        db?: DB;
-    } & EventReadWriter,
-) {
-    if (args.db) {
-        return get_events_with_filter(args.db)(args.filter);
-    }
-    return [];
-}
-1;
 
 function respond_event(
     sub_id: string,
