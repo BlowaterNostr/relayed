@@ -24,6 +24,7 @@ import {
     func_GetEventsByAuthors,
     func_GetReplaceableEvents,
     func_WriteReplaceableEvent,
+    write_regular_event_sqlite_ffi,
 } from "./resolvers/event.ts";
 import Landing from "./routes/landing.tsx";
 import Error404 from "./routes/_404.tsx";
@@ -53,6 +54,7 @@ import {
 import { func_GetChannelByID } from "./channel.ts";
 import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
 import { get_relay_members } from "./resolvers/policy.ts";
+import { Database } from "jsr:@db/sqlite@0.11";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -111,9 +113,12 @@ export async function run(args: {
 
     // SQLite Database
     let db: DB | undefined;
+    let db_ffi: Database | undefined;
     let get_channel_by_id: func_GetChannelByID;
     if (!isDenoDeploy) {
         db = new DB("relayed.db");
+        // https://github.com/denodrivers/sqlite3/blob/main/doc.md#usage
+        db_ffi = new Database("relayed.db");
         db.execute(`${sqlite_schema}${event_schema_sqlite}`);
         get_channel_by_id = get_channel_by_id_sqlite(db);
     }
@@ -196,13 +201,23 @@ export async function run(args: {
             delete_event: eventStore.delete_event,
             delete_events_from_pubkey: eventStore.delete_events_from_pubkey,
             get_deleted_event_ids: eventStore.get_deleted_event_ids,
-            write_regular_event: eventStore.write_regular_event.bind(eventStore),
+            write_regular_event: async (event: NostrEvent) => {
+                if (db) {
+                    const res = await write_regular_event_sqlite_ffi(db)(event);
+                    if (res instanceof Error) {
+                        console.error(res);
+                    }
+                }
+                console.log(db);
+                return eventStore.write_regular_event(event);
+            },
             write_replaceable_event: eventStore.write_replaceable_event,
             policyStore,
             relayInformationStore,
             get_relay_members: get_relay_members(db),
             kv,
             db: db,
+            db_ffi: db_ffi,
             // get_channel_by_name: get_channel_by_name(db)
             _debug: args._debug ? true : false,
         }),
@@ -260,6 +275,7 @@ const root_handler = (
         get_relay_members: func_GetRelayMembers;
         kv: Deno.Kv;
         db?: DB;
+        db_ffi?: Database;
         _debug: boolean;
     } & EventReadWriter,
 ) =>
@@ -398,7 +414,7 @@ async (req: Request) => {
     }
 };
 
-export const supported_nips = [1, 2];
+export const supported_nips = [1, 2, 11];
 export const software = "https://github.com/BlowaterNostr/relayed";
 
 const landing_handler = async (args: { relayInformationStore: RelayInformationStore }) => {

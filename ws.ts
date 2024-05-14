@@ -5,6 +5,7 @@ import {
     func_DeleteEvent,
     func_WriteRegularEvent,
     func_WriteReplaceableEvent,
+    get_events_with_filter,
     isReplaceableEvent,
 } from "./resolvers/event.ts";
 import {
@@ -24,12 +25,15 @@ import {
     verifyEvent,
 } from "./_libs.ts";
 import { NoteID } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/nip19.ts";
+import { Database } from "jsr:@db/sqlite@0.11";
+import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
 
 export const ws_handler = (
     args: {
         connections: Map<WebSocket, SubscriptionMap>;
         default_policy: DefaultPolicy;
         resolvePolicyByKind: func_ResolvePolicyByKind;
+        db_ffi?: Database;
     } & EventReadWriter,
 ) =>
 (req: Request, info: Deno.ServeHandlerInfo) => {
@@ -84,6 +88,7 @@ function onMessage(
         connections: Map<WebSocket, SubscriptionMap>;
         default_policy: DefaultPolicy;
         resolvePolicyByKind: func_ResolvePolicyByKind;
+        db_ffi?: Database;
     } & EventReadWriter,
 ) {
     const { this_socket, connections } = deps;
@@ -216,6 +221,7 @@ async function handle_cmd_req(
         this_socket: WebSocket;
         connections: Map<WebSocket, SubscriptionMap>;
         resolvePolicyByKind: func_ResolvePolicyByKind;
+        db_ffi?: Database;
     } & EventReadWriter,
 ) {
     const { this_socket } = args;
@@ -245,7 +251,7 @@ async function handle_cmd_req(
     // query this filter
     for (const filter of filters) {
         const event_candidates = await handle_filter({ ...args, filter });
-        for (const event of event_candidates.values()) {
+        for (const event of event_candidates) {
             send(this_socket, JSON.stringify(respond_event(sub_id, event)));
         }
     }
@@ -257,70 +263,15 @@ async function handle_filter(
     args: {
         filter: NostrFilter;
         resolvePolicyByKind: func_ResolvePolicyByKind;
+        db?: DB;
     } & EventReadWriter,
 ) {
-    const event_candidates = new Map<string, NostrEvent>();
-    const { filter, get_events_by_IDs, resolvePolicyByKind, get_events_by_kinds } = args;
-
-    if (filter.kinds) {
-        const replaceable_kinds: NostrKind[] = [];
-        for (const kind of filter.kinds) {
-            if (isReplaceableEvent(kind)) {
-                replaceable_kinds.push(kind);
-            }
-        }
-        const events = args.get_replaceable_events({
-            authors: filter.authors || [],
-            kinds: replaceable_kinds,
-        });
-        for await (const event of events) {
-            event_candidates.set(event.id, event);
-        }
+    if (args.db) {
+        return get_events_with_filter(args.db)(args.filter);
     }
-
-    if (filter.ids) {
-        const events = get_events_by_IDs(new Set(filter.ids));
-        for await (const event of events) {
-            const policy = await resolvePolicyByKind(event.kind);
-            if (policy.read == false) {
-                continue;
-            }
-            event_candidates.set(event.id, event);
-        }
-    }
-    if (filter.authors) {
-        if (event_candidates.size > 0) {
-        } else {
-            const events = args.get_events_by_authors(new Set(filter.authors));
-            for await (const event of events) {
-                event_candidates.set(event.id, event);
-            }
-        }
-    }
-    if (filter.kinds) {
-        if (event_candidates.size > 0) {
-            const keys = Array.from(event_candidates.keys());
-            for (const key of keys) {
-                const event = event_candidates.get(key) as NostrEvent;
-                if (filter.kinds.includes(event.kind)) {
-                    continue;
-                }
-                event_candidates.delete(key);
-            }
-        } else if (!filter.authors) {
-            const events = get_events_by_kinds(new Set(filter.kinds));
-            for await (const event of events) {
-                event_candidates.set(event.id, event);
-            }
-        }
-    }
-    if (filter.limit) {
-        for await (const event of args.get_events_by_filter(filter)) {
-            event_candidates.set(event.id, event);
-        }
-    }
-    return event_candidates;
+    return [];
 }
+1;
 
 function respond_event(
     sub_id: string,

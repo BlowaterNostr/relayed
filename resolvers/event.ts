@@ -9,7 +9,8 @@ import {
 } from "../_libs.ts";
 import { EventReadWriter } from "../main.tsx";
 import { assertEquals } from "https://deno.land/std@0.202.0/assert/assert_equals.ts";
-import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
+import { DB, SqliteError } from "https://deno.land/x/sqlite@v3.8/mod.ts";
+import { Database } from "jsr:@db/sqlite@0.11";
 
 export type func_GetEventsByIDs = (ids: Set<string>) => AsyncIterable<NostrEvent>;
 export type interface_GetEventsByIDs = {
@@ -299,15 +300,51 @@ CREATE TABLE IF NOT exists events_v2 (
 );
 `;
 
-// export const get_events_with_filter = (db: DB) => (filter: NostrFilter) => {
-//     db.query<[string] >(`
-//     SELECT event FROM events_v1
-//     WHERE id IN (:ids)
-//         AND pubkey IN (:authors)
-//         AND kind IN (:kinds);
-//     `, filter)
+export const get_events_with_filter = (db: DB) => (filter: NostrFilter) => {
+    let sql = `SELECT json(event) as event FROM events_v1 WHERE true`;
+    const params = [] as any[];
 
-// }
+    if (filter.ids && filter.ids.length > 0) {
+        sql += ` AND id IN (${filter.ids.map(() => "?").join(",")})`;
+        params.push(...filter.ids);
+    }
+
+    if (filter.authors && filter.authors.length > 0) {
+        sql += ` AND pubkey IN (${filter.authors.map(() => "?").join(",")})`;
+        params.push(...filter.authors);
+    }
+
+    if (filter.kinds && filter.kinds.length > 0) {
+        sql += ` AND kind IN (${filter.kinds.map(() => "?").join(",")})`;
+        params.push(...filter.kinds);
+    }
+
+    console.log(sql);
+    const results = db.query<[string]>(sql, params);
+    return results.map((r) => JSON.parse(r[0]) as NostrEvent);
+};
+
+export const write_regular_event_sqlite_ffi =
+    (db: DB): func_WriteRegularEvent => async (event: NostrEvent) => {
+        try {
+            const result = db.query(
+                `INSERT INTO events_v1 values
+    (:id, :pubkey, :kind, :content, :created_at, :event)`,
+                {
+                    id: event.id,
+                    pubkey: event.pubkey,
+                    kind: event.kind,
+                    content: event.content,
+                    created_at: event.created_at,
+                    event: JSON.stringify(event),
+                },
+            );
+            console.log(result);
+            return true;
+        } catch (e) {
+            return e as SqliteError;
+        }
+    };
 
 Deno.test("isMatched", async () => {
     const ctx = InMemoryAccountContext.Generate();

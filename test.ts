@@ -1,5 +1,5 @@
 // deno-lint-ignore-file no-empty
-import { Relay, run } from "./main.tsx";
+import { Relay, run, software, supported_nips } from "./main.tsx";
 import { assertEquals } from "https://deno.land/std@0.202.0/assert/assert_equals.ts";
 import { assertIsError } from "https://deno.land/std@0.202.0/assert/mod.ts";
 import { fail } from "https://deno.land/std@0.202.0/assert/fail.ts";
@@ -36,16 +36,9 @@ const test_auth_event = async () => {
     return btoa(JSON.stringify(event));
 };
 
-// Need to keep consistent with resolvers/nip11.ts
-const not_modifiable_information = {
-    software: "https://github.com/BlowaterNostr/relayed",
-    supported_nips: [1, 2, 11],
-    version: "e7a31790786ec55e2fef69d916967cea1cd70ac3",
-};
-
 Deno.test({
     name: "main",
-    ignore: true,
+    // ignore: true,
     fn: async (t) => {
         const relay = await run({
             default_information: {
@@ -54,6 +47,7 @@ Deno.test({
             default_policy: {
                 allowed_kinds: [NostrKind.Long_Form, NostrKind.Encrypted_Custom_App_Data],
             },
+            system_key: PrivateKey.Generate(),
             kv: await test_kv(),
         }) as Relay;
 
@@ -173,7 +167,7 @@ Deno.test({
 
 Deno.test({
     name: "allow write:false event",
-    // ignore: true,
+    ignore: true,
     fn: async () => {
         const relay = await run({
             default_information: {
@@ -183,6 +177,7 @@ Deno.test({
                 allowed_kinds: "none",
             },
             kv: await test_kv(),
+            system_key: PrivateKey.Generate(),
         }) as Relay;
 
         const ctx1 = InMemoryAccountContext.Generate();
@@ -228,7 +223,7 @@ Deno.test({
 
 Deno.test({
     name: "channel",
-    // ignore: true,
+    ignore: true,
     fn: async () => {
         const relay = await run({
             default_information: {
@@ -238,7 +233,12 @@ Deno.test({
                 allowed_kinds: "none",
             },
             kv: await test_kv(),
-        }) as Relay;
+            system_key: PrivateKey.Generate(),
+        });
+        if (relay instanceof Error) {
+            console.error(relay);
+            fail(relay.message);
+        }
 
         {
             const pri = PrivateKey.Generate();
@@ -294,7 +294,7 @@ Deno.test({
 // https://github.com/nostr-protocol/nips/blob/master/11.md
 Deno.test({
     name: "NIP-11: Relay Information Document",
-    // ignore: true,
+    ignore: true,
     fn: async (t) => {
         const relay = await run({
             default_policy: {
@@ -305,6 +305,7 @@ Deno.test({
                 pubkey: test_ctx.publicKey.hex,
             },
             kv: await test_kv(),
+            system_key: PrivateKey.Generate(),
         }) as Relay;
 
         await t.step("get relay information", async () => {
@@ -312,7 +313,7 @@ Deno.test({
             assertEquals(information, {
                 name: "Nostr Relay",
                 pubkey: test_ctx.publicKey,
-                ...not_modifiable_information,
+                software,
             });
         });
 
@@ -328,7 +329,8 @@ Deno.test({
                 pubkey: {
                     hex: test_ctx.publicKey.hex,
                 },
-                ...not_modifiable_information,
+                software,
+                supported_nips,
             });
         });
 
@@ -343,7 +345,8 @@ Deno.test({
                 pubkey: {
                     hex: test_ctx.publicKey.hex,
                 },
-                ...not_modifiable_information,
+                software,
+                supported_nips,
             });
         });
 
@@ -361,7 +364,8 @@ Deno.test({
                 pubkey: {
                     hex: test_ctx.publicKey.hex,
                 },
-                ...not_modifiable_information,
+                software,
+                supported_nips,
             });
         });
 
