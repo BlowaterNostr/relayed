@@ -24,7 +24,8 @@ import {
     func_GetEventsByAuthors,
     func_GetReplaceableEvents,
     func_WriteReplaceableEvent,
-    write_regular_event_sqlite_ffi,
+    write_regular_event_sqlite,
+    write_replaceable_event_sqlite,
 } from "./resolvers/event.ts";
 import Landing from "./routes/landing.tsx";
 import Error404 from "./routes/_404.tsx";
@@ -43,7 +44,6 @@ import {
     func_WriteRegularEvent,
 } from "./resolvers/event.ts";
 import { Cookie, getCookies, setCookie } from "https://deno.land/std@0.224.0/http/cookie.ts";
-import { sleep } from "https://raw.githubusercontent.com/BlowaterNostr/csp/master/csp.ts";
 import { Event_V2, Kind_V2 } from "./events.ts";
 import {
     create_channel_sqlite,
@@ -54,7 +54,6 @@ import {
 import { func_GetChannelByID } from "./channel.ts";
 import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
 import { get_relay_members } from "./resolvers/policy.ts";
-import { Database } from "jsr:@db/sqlite@0.11";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -113,12 +112,9 @@ export async function run(args: {
 
     // SQLite Database
     let db: DB | undefined;
-    let db_ffi: Database | undefined;
     let get_channel_by_id: func_GetChannelByID;
     if (!isDenoDeploy) {
         db = new DB("relayed.db");
-        // https://github.com/denodrivers/sqlite3/blob/main/doc.md#usage
-        db_ffi = new Database("relayed.db");
         db.execute(`${sqlite_schema}${event_schema_sqlite}`);
         get_channel_by_id = get_channel_by_id_sqlite(db);
     }
@@ -203,7 +199,7 @@ export async function run(args: {
             get_deleted_event_ids: eventStore.get_deleted_event_ids,
             write_regular_event: async (event: NostrEvent) => {
                 if (db) {
-                    const res = await write_regular_event_sqlite_ffi(db)(event);
+                    const res = await write_regular_event_sqlite(db)(event);
                     if (res instanceof Error) {
                         console.error(res);
                     }
@@ -211,13 +207,20 @@ export async function run(args: {
                 console.log(db);
                 return eventStore.write_regular_event(event);
             },
-            write_replaceable_event: eventStore.write_replaceable_event,
+            write_replaceable_event: async (event: NostrEvent) => {
+                if (db) {
+                    const res = await write_replaceable_event_sqlite(db)(event);
+                    if (res instanceof Error) {
+                        console.error(res);
+                    }
+                }
+                return eventStore.write_replaceable_event(event);
+            },
             policyStore,
             relayInformationStore,
             get_relay_members: get_relay_members(db),
             kv,
             db: db,
-            db_ffi: db_ffi,
             // get_channel_by_name: get_channel_by_name(db)
             _debug: args._debug ? true : false,
         }),
@@ -275,7 +278,6 @@ const root_handler = (
         get_relay_members: func_GetRelayMembers;
         kv: Deno.Kv;
         db?: DB;
-        db_ffi?: Database;
         _debug: boolean;
     } & EventReadWriter,
 ) =>

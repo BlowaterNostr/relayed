@@ -292,6 +292,16 @@ CREATE TABLE IF NOT exists events_v1 (
     event      JSON    NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS replaceable_events_v1 (
+    id         TEXT    PRIMARY KEY,
+    kind       INTEGER NOT NULL,
+    pubkey     TEXT    NOT NULL,
+    content    TEXT    NOT NULL,
+    created_at INTEGER NOT NULL,
+    event      JSON    NOT NULL,
+    UNIQUE (kind, pubkey)
+);
+
 CREATE TABLE IF NOT exists events_v2 (
     id         TEXT    PRIMARY KEY,
     pubkey     TEXT    NOT NULL,
@@ -319,17 +329,48 @@ export const get_events_with_filter = (db: DB) => (filter: NostrFilter) => {
         params.push(...filter.kinds);
     }
 
-    console.log(sql);
+    sql += ` LIMIT :limit`;
+    params.push(filter.limit || 100);
+
+    console.log(sql, "\n", params, "\n", filter);
     const results = db.query<[string]>(sql, params);
     return results.map((r) => JSON.parse(r[0]) as NostrEvent);
 };
 
-export const write_regular_event_sqlite_ffi =
-    (db: DB): func_WriteRegularEvent => async (event: NostrEvent) => {
+export const write_regular_event_sqlite = (db: DB): func_WriteRegularEvent => async (event: NostrEvent) => {
+    try {
+        const result = db.query(
+            `INSERT INTO events_v1 values
+    (:id, :pubkey, :kind, :content, :created_at, :event)`,
+            {
+                id: event.id,
+                pubkey: event.pubkey,
+                kind: event.kind,
+                content: event.content,
+                created_at: event.created_at,
+                event: JSON.stringify(event),
+            },
+        );
+        console.log(result);
+        return true;
+    } catch (e) {
+        return e as SqliteError;
+    }
+};
+
+export const write_replaceable_event_sqlite =
+    (db: DB): func_WriteReplaceableEvent => async (event: NostrEvent) => {
         try {
             const result = db.query(
-                `INSERT INTO events_v1 values
-    (:id, :pubkey, :kind, :content, :created_at, :event)`,
+                `INSERT INTO replaceable_events_v1 values
+                (:id, :pubkey, :kind, :content, :created_at, :event)
+                ON CONFLICT(kind, pubkey) DO UPDATE SET
+                    id = excluded.id,
+                    content = excluded.content,
+                    created_at = excluded.created_at,
+                    event = excluded.event
+                WHERE excluded.created_at > replaceable_events_v1.created_at;
+                `,
                 {
                     id: event.id,
                     pubkey: event.pubkey,
