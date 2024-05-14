@@ -103,22 +103,22 @@ export class PolicyStore {
             // generate new relay member list
             if (this.args.db) {
                 if (args.kind == NostrKind.TEXT_NOTE) {
-                    const event = await sign_event_v2(this.args.system_account, {
-                        pubkey: this.args.system_account.toPublicKey().hex,
-                        kind: Kind_V2.RelayMember,
-                        members: Array.from(policy.allow),
-                        created_at: Date.now(),
-                    });
-                    // warn: could throw
-                    try {
-                        this.args.db.query(
-                            `INSERT INTO events_v2 (id, pubkey, kind, event) VALUES (?, ?, ?, ?);`,
-                            [event.id, event.pubkey, event.kind, JSON.stringify(event)],
-                        );
-                    } catch (e) {
-                        console.log(event);
-                        console.error(e);
-                    }
+                    // const event = await sign_event_v2(this.args.system_account, {
+                    //     pubkey: this.args.system_account.toPublicKey().hex,
+                    //     kind: Kind_V2.RelayMember,
+                    //     members: Array.from(policy.allow),
+                    //     created_at: Date.now(),
+                    // });
+                    // // warn: could throw
+                    // try {
+                    //     this.args.db.query(
+                    //         `INSERT INTO events_v2 (id, pubkey, kind, event) VALUES (?, ?, ?, ?);`,
+                    //         [event.id, event.pubkey, event.kind, JSON.stringify(event)],
+                    //     );
+                    // } catch (e) {
+                    //     console.log(event);
+                    //     console.error(e);
+                    // }
                 }
             } else {
                 console.log("Feature Not Supported in this environment: Relay Members");
