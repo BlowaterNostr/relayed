@@ -18,8 +18,6 @@ import { PolicyStore } from "./resolvers/policy.ts";
 import { Policies } from "./resolvers/policy.ts";
 import {
     event_schema_sqlite,
-    func_DeleteEventsFromPubkey,
-    func_GetDeletedEventIDs,
     func_GetEventCount,
     func_GetEventsByAuthors,
     func_GetReplaceableEvents,
@@ -35,19 +33,14 @@ import {
     RelayInformationStore,
     RelayInformationStringify,
 } from "./resolvers/nip11.ts";
-import {
-    Event_V1_Store,
-    func_DeleteEvent,
-    func_GetEventsByFilter,
-    func_GetEventsByIDs,
-    func_GetEventsByKinds,
-    func_WriteRegularEvent,
-} from "./resolvers/event.ts";
+import { func_GetEventsByFilter, func_GetEventsByIDs, func_WriteRegularEvent } from "./resolvers/event.ts";
 import { Cookie, getCookies, setCookie } from "https://deno.land/std@0.224.0/http/cookie.ts";
 import { Event_V2, Kind_V2 } from "./events.ts";
 import {
     create_channel_sqlite,
     edit_channel_sqlite,
+    func_CreateChannel,
+    func_EditChannel,
     get_channel_by_id_sqlite,
     sqlite_schema,
 } from "./channel.ts";
@@ -55,8 +48,14 @@ import { func_GetChannelByID } from "./channel.ts";
 import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
 import { get_relay_members } from "./resolvers/policy.ts";
 import { get_event_by_id } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/relay-single-test.ts";
-import { get_events_by_filter } from "./resolvers/event.ts";
+import { get_events_by_filter_sqlite } from "./resolvers/event.ts";
 import { get_event_count_sqlite } from "./resolvers/event.ts";
+import {
+    func_DeleteEvent,
+    func_DeleteEventsFromPubkey,
+    func_GetDeletedEventIDs,
+} from "./resolvers/event_deletion.ts";
+import { delete_event_sqlite } from "./resolvers/event_deletion.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -122,6 +121,7 @@ export async function run(args: {
     const write_replaceable_event = write_replaceable_event_sqlite(db);
     const write_regular_event = write_regular_event_sqlite(db);
     const get_event_count = get_event_count_sqlite(db);
+    const get_events_by_filter = get_events_by_filter_sqlite(db);
 
     // Administrator Keys
     let admin_pubkey: string | undefined | PublicKey | Error = args.default_information?.pubkey;
@@ -175,8 +175,6 @@ export async function run(args: {
         },
     );
 
-    const eventStore = await Event_V1_Store.New(kv);
-
     const port = args.port || 8000;
     delete args.port;
     const server = Deno.serve(
@@ -190,22 +188,26 @@ export async function run(args: {
         },
         root_handler({
             ...args,
+            // deletion
+            delete_event: delete_event_sqlite(db),
+            delete_events_from_pubkey: async () => {
+                return [];
+            },
+            get_deleted_event_ids: async () => {
+                return [];
+            },
             connections,
             resolvePolicyByKind: policyStore.resolvePolicyByKind,
-            get_events_by_IDs: eventStore.get_events_by_IDs.bind(eventStore),
             get_event_count,
-            delete_event: eventStore.delete_event,
-            delete_events_from_pubkey: eventStore.delete_events_from_pubkey,
-            get_deleted_event_ids: eventStore.get_deleted_event_ids,
-            get_events_by_filter: get_events_by_filter(db),
+            get_events_by_filter,
             write_regular_event,
             write_replaceable_event,
             policyStore,
             relayInformationStore,
             get_relay_members: get_relay_members(db),
-            kv,
-            db: db,
-            // get_channel_by_name: get_channel_by_name(db)
+            create_channel: create_channel_sqlite(db),
+            edit_channel: edit_channel_sqlite(db),
+            kv: kv,
             _debug: args._debug ? true : false,
         }),
     );
@@ -229,7 +231,12 @@ export async function run(args: {
         set_relay_information: relayInformationStore.set_relay_information,
         get_relay_information: relayInformationStore.resolveRelayInformation,
         // event
-        get_event: eventStore.get_event,
+        get_event: async (id) => {
+            const events = await get_events_by_filter({
+                ids: [id],
+            });
+            return events[0];
+        },
         // channel
         get_channel_by_id: (id: string) => {
             return get_channel_by_id(id);
@@ -245,17 +252,22 @@ const root_handler = (
         policyStore: PolicyStore;
         relayInformationStore: RelayInformationStore;
         // get_channel_by_name: func_GetChannelByName;
+        // channel
+        create_channel: func_CreateChannel;
+        edit_channel: func_EditChannel;
+        // deletion
         delete_event: func_DeleteEvent;
         delete_events_from_pubkey: func_DeleteEventsFromPubkey;
+        // get
         get_deleted_event_ids: func_GetDeletedEventIDs;
-        write_regular_event: func_WriteRegularEvent;
-        write_replaceable_event: func_WriteReplaceableEvent;
-        get_events_by_IDs: func_GetEventsByIDs;
         get_events_by_filter: func_GetEventsByFilter;
         get_event_count: func_GetEventCount;
+        // write
+        write_regular_event: func_WriteRegularEvent;
+        write_replaceable_event: func_WriteReplaceableEvent;
+        // relay
         get_relay_members: func_GetRelayMembers;
         kv: Deno.Kv;
-        db?: DB;
         _debug: boolean;
     },
 ) =>
@@ -304,9 +316,6 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
                 }
             }
         } else if (req.method == "POST") {
-            if (!args.db) {
-                return new Response("POST is not supported in this environment", { status: 400 });
-            }
             const text = await req.text();
             const event = parseJSON<Event_V2>(text);
             if (event instanceof Error) {
@@ -319,14 +328,14 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
                 return new Response("event is not valid", { status: 400 });
             }
             if (event.kind == Kind_V2.ChannelCreation) {
-                const ok = await create_channel_sqlite(args.db)(event);
+                const ok = await args.create_channel(event);
                 if (ok) {
                     return new Response();
                 } else {
                     return new Response("failed to write event", { status: 400 });
                 }
             } else if (event.kind == Kind_V2.ChannelEdition) {
-                const res = await edit_channel_sqlite(args.db)(event);
+                const res = await args.edit_channel(event);
                 if (res instanceof Error) {
                     return new Response(res.message, { status: 400 });
                 }
@@ -343,14 +352,12 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
 
 const graphql_handler = (
     args: {
-        kv: Deno.Kv;
         // policy
         policyStore: PolicyStore;
         // relay info
         relayInformationStore: RelayInformationStore;
         // get
         get_events_by_filter: func_GetEventsByFilter;
-        get_events_by_IDs: func_GetEventsByIDs;
         get_event_count: func_GetEventCount;
         // write
         write_regular_event: func_WriteRegularEvent;
@@ -361,6 +368,8 @@ const graphql_handler = (
         get_deleted_event_ids: func_GetDeletedEventIDs;
         // relay members
         get_relay_members: func_GetRelayMembers;
+        // kv
+        kv: Deno.Kv;
     },
 ) =>
 async (req: Request) => {

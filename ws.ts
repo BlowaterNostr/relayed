@@ -1,12 +1,7 @@
 // deno-lint-ignore-file
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
 import { DefaultPolicy } from "./main.tsx";
-import {
-    func_DeleteEvent,
-    func_WriteRegularEvent,
-    func_WriteReplaceableEvent,
-    get_events_by_filter,
-} from "./resolvers/event.ts";
+import { func_WriteRegularEvent, func_WriteReplaceableEvent } from "./resolvers/event.ts";
 import {
     _RelayResponse_EOSE,
     _RelayResponse_Event,
@@ -24,9 +19,9 @@ import {
     verifyEvent,
 } from "./_libs.ts";
 import { NoteID } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/nip19.ts";
-import { Database } from "jsr:@db/sqlite@0.11";
-import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
+
 import { func_GetEventsByFilter } from "./resolvers/event.ts";
+import { func_DeleteEvent } from "./resolvers/event_deletion.ts";
 
 export const ws_handler = (
     args: {
@@ -181,7 +176,7 @@ async function handle_cmd_event(args: {
 
     if (event.kind == NostrKind.DELETE) {
         for (const e of getTags(event).e) {
-            const ok = await args.delete_event(NoteID.FromHex(e));
+            const ok = await args.delete_event(e);
             if (!ok) {
                 console.error("failed to delete", e);
             }

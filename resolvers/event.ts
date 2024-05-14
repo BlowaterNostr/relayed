@@ -1,11 +1,9 @@
-import { NoteID } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/nip19.ts";
 import {
     InMemoryAccountContext,
     NostrEvent,
     NostrFilter,
     NostrKind,
     prepareNormalNostrEvent,
-    PublicKey,
 } from "../_libs.ts";
 import { assertEquals } from "https://deno.land/std@0.202.0/assert/assert_equals.ts";
 import { DB, SqliteError } from "https://deno.land/x/sqlite@v3.8/mod.ts";
@@ -35,142 +33,7 @@ export type func_GetReplaceableEvents = (args: {
     authors: string[];
 }) => AsyncIterable<NostrEvent>;
 
-export type func_DeleteEvent = (event: NostrEvent | NoteID | string) => Promise<boolean>;
-export type func_DeleteEventsFromPubkey = (pubkey: string | PublicKey) => Promise<string[]>;
-
 export type func_GetEventCount = () => Promise<Map<NostrKind, number>>;
-
-export type func_GetDeletedEventIDs = () => Promise<string[]>;
-interface DeletedEventIDs {
-    get_deleted_event_ids: func_GetDeletedEventIDs;
-}
-
-export class Event_V1_Store implements DeletedEventIDs {
-    private constructor(
-        private events: Map<string, NostrEvent>,
-        private kv: Deno.Kv,
-    ) {}
-
-    static async New(kv: Deno.Kv) {
-        const entries = kv.list<NostrEvent>({ prefix: ["event"] });
-        const events = new Map();
-        for await (const entry of entries) {
-            const event = entry.value;
-            events.set(event.id, event);
-        }
-        return new Event_V1_Store(events, kv);
-    }
-
-    async *get_events_by_authors(authors: Set<string>): AsyncIterable<NostrEvent> {
-        const hex_keys = new Set();
-        for (const author of authors) {
-            const key = PublicKey.FromString(author);
-            if (key instanceof Error) {
-                continue;
-            }
-            hex_keys.add(key.hex);
-        }
-        for (const event of this.events.values()) {
-            if (hex_keys.has(event.pubkey)) {
-                yield event;
-            }
-        }
-    }
-
-    async *get_events_by_IDs(ids: Set<string>) {
-        for (const event of this.events.values()) {
-            if (ids.has(event.id)) {
-                yield event;
-            }
-        }
-    }
-
-    get_event = async (id: string) => {
-        const entry = await this.kv.get<NostrEvent>(["event", id]);
-        return entry.value;
-    };
-
-    async *get_events_by_kinds(kinds: Set<NostrKind>) {
-        for (const event of this.events.values()) {
-            if (kinds.has(event.kind)) {
-                yield event;
-            }
-        }
-    }
-
-    delete_event = async (event_or_id: NostrEvent | NoteID | string) => {
-        let id: string;
-        if (typeof event_or_id == "string") {
-            id = event_or_id;
-        } else if (event_or_id instanceof NoteID) {
-            id = event_or_id.hex;
-        } else {
-            id = event_or_id.id;
-        }
-
-        // delete the event
-        const events = this.get_events_by_IDs(new Set([id]));
-        for await (const event of events) {
-            const keys = regular_event_keys(event);
-            await this.kv.delete(keys[0]);
-            await this.kv.delete(keys[1]);
-            await this.kv.delete(keys[2]);
-        }
-
-        // record deleted event id
-        const result = await this.kv.set(deletion_key(id), id);
-        if (result.ok) {
-            this.events.delete(id);
-        }
-
-        return result.ok;
-    };
-
-    delete_events_from_pubkey = async (pubkey: PublicKey | string) => {
-        if (pubkey instanceof PublicKey) {
-            pubkey = pubkey.hex;
-        }
-        const events = this.get_events_by_authors(new Set([pubkey]));
-
-        const deleted = [] as string[];
-        for await (const event of events) {
-            const ok = await this.delete_event(event);
-            if (!ok) {
-                console.error(`failed to delete`, event);
-                continue;
-            }
-            deleted.push(event.id);
-        }
-        return deleted;
-    };
-
-    get_deleted_event_ids = async () => {
-        const list = this.kv.list<string>({
-            prefix: deletion_key_prefix(),
-        });
-        const ids = [] as string[];
-        for await (const entry of list) {
-            ids.push(entry.value);
-        }
-        return ids;
-    };
-}
-
-function regular_event_keys(event: NostrEvent) {
-    return [
-        ["event", event.id],
-        ["event", event.kind, event.id],
-        ["event", event.pubkey, event.id],
-    ];
-}
-
-function deletion_key_prefix() {
-    return ["event", "deleted"];
-}
-
-function deletion_key(id: string) {
-    return [...deletion_key_prefix(), id];
-}
 
 export function isReplaceableEvent(kind: NostrKind) {
     return kind == NostrKind.META_DATA || kind == NostrKind.CONTACTS || (10000 <= kind && kind < 20000);
@@ -227,32 +90,33 @@ CREATE TABLE IF NOT exists events_v2 (
 );
 `;
 
-export const get_events_by_filter = (db: DB): func_GetEventsByFilter => async (filter: NostrFilter) => {
-    let sql = `SELECT json(event) as event FROM events_v1 WHERE true`;
-    const params = [] as any[];
+export const get_events_by_filter_sqlite =
+    (db: DB): func_GetEventsByFilter => async (filter: NostrFilter) => {
+        let sql = `SELECT json(event) as event FROM events_v1 WHERE true`;
+        const params = [] as any[];
 
-    if (filter.ids && filter.ids.length > 0) {
-        sql += ` AND id IN (${filter.ids.map(() => "?").join(",")})`;
-        params.push(...filter.ids);
-    }
+        if (filter.ids && filter.ids.length > 0) {
+            sql += ` AND id IN (${filter.ids.map(() => "?").join(",")})`;
+            params.push(...filter.ids);
+        }
 
-    if (filter.authors && filter.authors.length > 0) {
-        sql += ` AND pubkey IN (${filter.authors.map(() => "?").join(",")})`;
-        params.push(...filter.authors);
-    }
+        if (filter.authors && filter.authors.length > 0) {
+            sql += ` AND pubkey IN (${filter.authors.map(() => "?").join(",")})`;
+            params.push(...filter.authors);
+        }
 
-    if (filter.kinds && filter.kinds.length > 0) {
-        sql += ` AND kind IN (${filter.kinds.map(() => "?").join(",")})`;
-        params.push(...filter.kinds);
-    }
+        if (filter.kinds && filter.kinds.length > 0) {
+            sql += ` AND kind IN (${filter.kinds.map(() => "?").join(",")})`;
+            params.push(...filter.kinds);
+        }
 
-    sql += ` LIMIT :limit`;
-    params.push(filter.limit || 100);
+        sql += ` ORDER BY created_at DESC LIMIT :limit `;
+        params.push(filter.limit || 200);
 
-    console.log(sql, "\n", params, "\n", filter);
-    const results = db.query<[string]>(sql, params);
-    return results.map((r) => JSON.parse(r[0]) as NostrEvent);
-};
+        console.log(sql, "\n", params, "\n", filter);
+        const results = db.query<[string]>(sql, params);
+        return results.map((r) => JSON.parse(r[0]) as NostrEvent);
+    };
 
 export const write_regular_event_sqlite = (db: DB): func_WriteRegularEvent => async (event: NostrEvent) => {
     try {

@@ -17,6 +17,7 @@ test: fmt
 		--allow-env=DENO_DEPLOYMENT_ID,DENO_DIR,HOME \
 		--coverage \
 		# --filter $(filter) \
+		--trace-leaks \
 		test.ts
 
 cov:
