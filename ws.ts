@@ -252,9 +252,9 @@ async function handle_cmd_req(
     for (const filter of filters) {
         const event_candidates = await handle_filter({ ...args, filter });
         for (const event of event_candidates) {
-            console.log("matched", event);
             const policy = await args.resolvePolicyByKind(event.kind);
-            if (policy.read == false) {
+            const pubkey = PublicKey.FromHex(event.pubkey) as PublicKey
+            if (policy.read == false && !policy.allow.has(pubkey.hex) && !policy.allow.has(pubkey.bech32())) {
                 continue;
             }
             send(this_socket, JSON.stringify(respond_event(sub_id, event)));
