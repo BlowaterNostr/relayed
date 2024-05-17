@@ -16,7 +16,7 @@ import {
     SingleRelayConnection,
     SubscriptionStream,
 } from "./_libs.ts";
-import * as client_test from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/relay-single-test.ts";
+import * as client_test from "https://raw.githubusercontent.com/bob2402/relayed/allow/relay-single-test.ts";
 import { ChannelCreation, ChannelEdition } from "./events.ts";
 import { Kind_V2 } from "./events.ts";
 
