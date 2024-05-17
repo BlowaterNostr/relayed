@@ -1,5 +1,3 @@
-/** @jsxImportSource "https://esm.sh/preact@10.19.6/jsx-runtime" */
-
 export default function Error404() {
     return (
         <>
