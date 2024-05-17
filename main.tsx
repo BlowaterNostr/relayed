@@ -98,7 +98,7 @@ export async function run(args: {
     admin?: PublicKey;
     default_policy: DefaultPolicy;
     default_information?: RelayInformationStringify;
-    system_key: string | PrivateKey;
+    // system_key: string | PrivateKey;
     kv?: Deno.Kv;
     _debug?: boolean;
 }): Promise<Error | Relay> {
@@ -141,13 +141,13 @@ export async function run(args: {
     }
 
     // Relay Key
-    let system_key: string | PrivateKey | Error = args.system_key;
-    if (typeof system_key == "string") {
-        system_key = PrivateKey.FromString(system_key);
-        if (system_key instanceof Error) {
-            return system_key;
-        }
-    }
+    // let system_key: string | PrivateKey | Error = args.system_key;
+    // if (typeof system_key == "string") {
+    //     system_key = PrivateKey.FromString(system_key);
+    //     if (system_key instanceof Error) {
+    //         return system_key;
+    //     }
+    // }
     // argument checking done
     //-----------------------
 
@@ -163,7 +163,7 @@ export async function run(args: {
     const policyStore = new PolicyStore({
         default_policy,
         kv,
-        system_account: system_key,
+        // system_account: system_key,
         initial_policies: await get_all_policies(),
         db,
     });

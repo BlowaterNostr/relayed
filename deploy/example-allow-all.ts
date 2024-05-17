@@ -1,4 +1,4 @@
-import { run } from "https://raw.githubusercontent.com/BlowaterNostr/relayed/main/main.tsx";
+import { run } from "https://raw.githubusercontent.com/bob2402/relayed/allow/main.tsx";
 
 const relay = await run({
     port: 8080,

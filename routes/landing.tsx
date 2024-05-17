@@ -1,3 +1,4 @@
+/** @jsxImportSource "https://esm.sh/preact@10.19.6/jsx-runtime" */
 import { software, supported_nips } from "../main.tsx";
 import { RelayInformation } from "../resolvers/nip11.ts";
 
