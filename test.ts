@@ -47,7 +47,7 @@ Deno.test({
             default_policy: {
                 allowed_kinds: [NostrKind.Long_Form, NostrKind.Encrypted_Custom_App_Data],
             },
-            system_key: PrivateKey.Generate(),
+            // system_key: PrivateKey.Generate(),
             kv: await test_kv(),
         }) as Relay;
 
@@ -175,7 +175,7 @@ Deno.test({
                 allowed_kinds: "none",
             },
             kv: await test_kv(),
-            system_key: PrivateKey.Generate(),
+            // system_key: PrivateKey.Generate(),
         }) as Relay;
 
         const ctx1 = InMemoryAccountContext.Generate();
@@ -231,7 +231,7 @@ Deno.test({
                 allowed_kinds: "none",
             },
             kv: await test_kv(),
-            system_key: PrivateKey.Generate(),
+            // system_key: PrivateKey.Generate(),
         });
         if (relay instanceof Error) {
             console.error(relay);
@@ -303,7 +303,7 @@ Deno.test({
                 pubkey: test_ctx.publicKey.hex,
             },
             kv: await test_kv(),
-            system_key: PrivateKey.Generate(),
+            // system_key: PrivateKey.Generate(),
         }) as Relay;
 
         await t.step("get relay information", async () => {
