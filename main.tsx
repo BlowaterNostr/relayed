@@ -171,6 +171,7 @@ export async function run(args: {
         kv,
         {
             ...args.default_information,
+            auth_required: args.default_information?.auth_required || false,
             pubkey: admin_pubkey,
         },
     );
@@ -312,7 +313,15 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
                 if (req.headers.get("accept")?.includes("application/nostr+json")) {
                     return information_handler(args);
                 } else {
-                    return ws_handler(args)(req, info);
+                    const relay_info = await args.relayInformationStore.resolveRelayInformation();
+                    if (relay_info instanceof Error) {
+                        console.error(relay_info);
+                        return new Response("", { status: 500 });
+                    }
+                    return ws_handler({
+                        ...args,
+                        auth_required: relay_info.auth_required,
+                    })(req, info);
                 }
             }
         } else if (req.method == "POST") {
@@ -382,7 +391,18 @@ async (req: Request) => {
                 return new Response(`{"errors":"no token"}`);
             }
 
-            const event = JSON.parse(atob(token));
+            const rawEvent = atobSafe(token);
+            if (rawEvent instanceof Error) {
+                return new Response(JSON.stringify({
+                    errors: [`${rawEvent.message}`],
+                }));
+            }
+            const event = parseJSON<NostrEvent>(rawEvent);
+            if (event instanceof Error) {
+                return new Response(JSON.stringify({
+                    errors: [`${event.message}`],
+                }));
+            }
             const error = await verifyToken(event, args.relayInformationStore);
             if (error instanceof Error) {
                 return new Response(JSON.stringify({
@@ -573,3 +593,11 @@ const graphiql = `
     </script>
   </body>
 </html>`;
+
+export function atobSafe(data) {
+    try {
+        return atob(data);
+    } catch (e) {
+        return e as Error;
+    }
+}

@@ -1,6 +1,6 @@
 // deno-lint-ignore-file
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
-import { DefaultPolicy } from "./main.tsx";
+import { atobSafe, DefaultPolicy } from "./main.tsx";
 import { func_WriteRegularEvent, func_WriteReplaceableEvent } from "./resolvers/event.ts";
 import {
     _RelayResponse_EOSE,
@@ -32,37 +32,42 @@ export const ws_handler = (
         write_regular_event: func_WriteRegularEvent;
         write_replaceable_event: func_WriteReplaceableEvent;
         delete_event: func_DeleteEvent;
+        auth_required: boolean;
     },
 ) =>
 async (req: Request, info: Deno.ServeHandlerInfo) => {
     const { connections } = args;
-    console.log("policy");
 
     if (req.headers.get("upgrade") != "websocket") {
         return new Response(null, { status: 501 });
     }
 
-    {
-        // authentication
-        const url = new URL(req.url);
-        const auth = url.searchParams.get("auth");
-        if (auth == null || auth == "") {
-            return new Response("no auth param is found", { status: 401 });
-        }
-        const event = parseJSON<NostrEvent>(atob(auth));
-        if (event instanceof Error) {
-            return new Response("invalid auth event format", { status: 401 });
-        }
-        const policy = await args.resolvePolicyByKind(NostrKind.TEXT_NOTE);
-        if (!policy.allow.has(event.pubkey)) {
-            return new Response(`pubkey ${event.pubkey} is not allowed`, { status: 401 });
-        }
-    }
-
     const { socket, response } = Deno.upgradeWebSocket(req);
 
-    socket.onopen = ((socket: WebSocket) => (e) => {
+    socket.onopen = ((socket: WebSocket) => async (e) => {
         console.log("a client connected!", info.remoteAddr);
+
+        if (args.auth_required) {
+            const url = new URL(req.url);
+            const auth = url.searchParams.get("auth");
+            if (auth == null || auth == "") {
+                socket.close(1011, "no auth event found");
+                return response;
+            }
+            const rawEvent = atobSafe(auth);
+            if (rawEvent instanceof Error) {
+                socket.close(1011, rawEvent.message);
+                return response;
+            }
+            const event = parseJSON<NostrEvent>(rawEvent);
+            if (event instanceof Error) {
+                return new Response("invalid auth event format", { status: 401 });
+            }
+            const policy = await args.resolvePolicyByKind(NostrKind.TEXT_NOTE);
+            if (!policy.allow.has(event.pubkey)) {
+                return new Response(`pubkey ${event.pubkey} is not allowed`, { status: 401 });
+            }
+        }
         connections.set(socket, new Map());
     })(socket);
 
