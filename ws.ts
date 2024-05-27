@@ -34,11 +34,29 @@ export const ws_handler = (
         delete_event: func_DeleteEvent;
     },
 ) =>
-(req: Request, info: Deno.ServeHandlerInfo) => {
+async (req: Request, info: Deno.ServeHandlerInfo) => {
     const { connections } = args;
+    console.log("policy");
 
     if (req.headers.get("upgrade") != "websocket") {
         return new Response(null, { status: 501 });
+    }
+
+    {
+        // authentication
+        const url = new URL(req.url);
+        const auth = url.searchParams.get("auth");
+        if (auth == null || auth == "") {
+            return new Response("no auth param is found", { status: 401 });
+        }
+        const event = parseJSON<NostrEvent>(atob(auth));
+        if (event instanceof Error) {
+            return new Response("invalid auth event format", { status: 401 });
+        }
+        const policy = await args.resolvePolicyByKind(NostrKind.TEXT_NOTE);
+        if (!policy.allow.has(event.pubkey)) {
+            return new Response(`pubkey ${event.pubkey} is not allowed`, { status: 401 });
+        }
     }
 
     const { socket, response } = Deno.upgradeWebSocket(req);

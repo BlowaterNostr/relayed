@@ -275,8 +275,8 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
     if (args._debug) {
         console.log(req);
     }
-    const { pathname, protocol } = new URL(req.url);
-    if (pathname === "/api/auth/login") {
+    const url = new URL(req.url);
+    if (url.pathname === "/api/auth/login") {
         const body = await req.json();
         if (!body) {
             return new Response(`{"errors":"request body is null"}`, { status: 400 });
@@ -300,12 +300,12 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
             return resp;
         }
     }
-    if (pathname == "/api") {
+    if (url.pathname == "/api") {
         return graphql_handler(args)(req);
     }
-    if (pathname == "/") {
+    if (url.pathname == "/") {
         if (req.method == "GET") {
-            if (protocol == "http:" || protocol == "https:") {
+            if (url.protocol == "http:" || url.protocol == "https:") {
                 if (req.headers.get("accept")?.includes("text/html")) {
                     return landing_handler(args);
                 }
