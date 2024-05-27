@@ -51,11 +51,13 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
             const url = new URL(req.url);
             const auth = url.searchParams.get("auth");
             if (auth == null || auth == "") {
+                // https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4
                 socket.close(1011, "no auth event found");
                 return response;
             }
             const rawEvent = atobSafe(auth);
             if (rawEvent instanceof Error) {
+                // https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4
                 socket.close(1011, rawEvent.message);
                 return response;
             }

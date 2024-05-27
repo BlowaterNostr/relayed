@@ -43,6 +43,7 @@ Deno.test({
         const relay = await run({
             default_information: {
                 pubkey: test_ctx.publicKey.hex,
+                auth_required: false,
             },
             default_policy: {
                 allowed_kinds: [NostrKind.Long_Form, NostrKind.Encrypted_Custom_App_Data],
@@ -170,6 +171,7 @@ Deno.test({
         const relay = await run({
             default_information: {
                 pubkey: test_ctx.publicKey.hex,
+                auth_required: false,
             },
             default_policy: {
                 allowed_kinds: "none",
@@ -226,6 +228,7 @@ Deno.test({
         const relay = await run({
             default_information: {
                 pubkey: test_ctx.publicKey.hex,
+                auth_required: false,
             },
             default_policy: {
                 allowed_kinds: "none",
@@ -294,13 +297,14 @@ Deno.test({
     name: "NIP-11: Relay Information Document",
     // ignore: true,
     fn: async (t) => {
-        const relay = await run({
+        await using relay = await run({
             default_policy: {
                 allowed_kinds: "none",
             },
             default_information: {
                 name: "Nostr Relay",
                 pubkey: test_ctx.publicKey.hex,
+                auth_required: false,
             },
             kv: await test_kv(),
             system_key: PrivateKey.Generate(),
@@ -313,6 +317,7 @@ Deno.test({
                 pubkey: test_ctx.publicKey,
                 software,
                 supported_nips,
+                auth_required: false,
             });
         });
 
@@ -330,6 +335,7 @@ Deno.test({
                 },
                 software,
                 supported_nips,
+                auth_required: false,
             });
         });
 
@@ -369,8 +375,6 @@ Deno.test({
                 supported_nips,
             });
         });
-
-        await relay.shutdown();
     },
 });
 

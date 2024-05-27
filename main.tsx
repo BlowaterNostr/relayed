@@ -89,6 +89,7 @@ export type Relay = {
     }) => Promise<Policy | Error>;
     // channel
     get_channel_by_id: func_GetChannelByID;
+    [Symbol.asyncDispose]: () => Promise<void>;
 };
 
 const ENV_relayed_pubkey = "relayed_pubkey";
@@ -215,15 +216,16 @@ export async function run(args: {
 
     // const get_channel_by_id = get_channel_by_id_kv(kv)
 
+    const shutdown = async () => {
+        await server.shutdown();
+        args.kv?.close();
+        db?.close();
+    };
     return {
         server,
         ws_url: `ws://${await hostname}:${port}`,
         http_url: `http://${await hostname}:${port}`,
-        shutdown: async () => {
-            await server.shutdown();
-            args.kv?.close();
-            db?.close();
-        },
+        shutdown,
         // policy
         set_policy: policyStore.set_policy,
         get_policy: policyStore.resolvePolicyByKind,
@@ -241,6 +243,9 @@ export async function run(args: {
         // channel
         get_channel_by_id: (id: string) => {
             return get_channel_by_id(id);
+        },
+        [Symbol.asyncDispose]() {
+            return shutdown();
         },
     };
 }
