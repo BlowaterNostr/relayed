@@ -11,12 +11,11 @@ fmt:
 	deno fmt
 
 test: fmt
-	deno test --unstable-kv \
+	deno test --trace-leaks --unstable-kv \
 		--allow-read=queries,test.sqlite,relayed.db,relayed.db-journal \
 		--allow-net --allow-write --allow-ffi \
 		--allow-env=DENO_DEPLOYMENT_ID,DENO_DIR,HOME \
 		--coverage \
-		--trace-leaks \
 		test.ts
 
 cov:
