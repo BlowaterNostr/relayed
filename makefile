@@ -11,8 +11,8 @@ fmt:
 	deno fmt
 
 test: fmt
-	deno test --unstable-kv --unstable-ffi \
-		--allow-read=queries,test.sqlite,relayed.db,relayed.db-journal,/Users/mac/Library/Caches/deno/plug \
+	deno test --unstable-kv \
+		--allow-read=queries,test.sqlite,relayed.db,relayed.db-journal \
 		--allow-net --allow-write --allow-ffi \
 		--allow-env=DENO_DEPLOYMENT_ID,DENO_DIR,HOME \
 		--coverage \
