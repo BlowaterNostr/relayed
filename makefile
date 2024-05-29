@@ -16,7 +16,6 @@ test: fmt
 		--allow-net --allow-write --allow-ffi \
 		--allow-env=DENO_DEPLOYMENT_ID,DENO_DIR,HOME \
 		--coverage \
-		# --filter $(filter) \
 		--trace-leaks \
 		test.ts
 
