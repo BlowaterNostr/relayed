@@ -19,8 +19,6 @@ import { Policies } from "./resolvers/policy.ts";
 import {
     event_schema_sqlite,
     func_GetEventCount,
-    func_GetEventsByAuthors,
-    func_GetReplaceableEvents,
     func_WriteReplaceableEvent,
     write_regular_event_sqlite,
     write_replaceable_event_sqlite,
@@ -33,7 +31,7 @@ import {
     RelayInformationStore,
     RelayInformationStringify,
 } from "./resolvers/nip11.ts";
-import { func_GetEventsByFilter, func_GetEventsByIDs, func_WriteRegularEvent } from "./resolvers/event.ts";
+import { func_GetEventsByFilter, func_WriteRegularEvent } from "./resolvers/event.ts";
 import { Cookie, getCookies, setCookie } from "https://deno.land/std@0.224.0/http/cookie.ts";
 import { Event_V2, Kind_V2 } from "./events.ts";
 import {
@@ -47,7 +45,6 @@ import {
 import { func_GetChannelByID } from "./channel.ts";
 import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
 import { get_relay_members } from "./resolvers/policy.ts";
-import { get_event_by_id } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/relay-single-test.ts";
 import { get_events_by_filter_sqlite } from "./resolvers/event.ts";
 import { get_event_count_sqlite } from "./resolvers/event.ts";
 import {
@@ -99,7 +96,6 @@ export async function run(args: {
     admin?: PublicKey;
     default_policy: DefaultPolicy;
     default_information?: RelayInformationStringify;
-    system_key: string | PrivateKey;
     kv?: Deno.Kv;
     _debug?: boolean;
 }): Promise<Error | Relay> {
@@ -142,13 +138,13 @@ export async function run(args: {
     }
 
     // Relay Key
-    let system_key: string | PrivateKey | Error = args.system_key;
-    if (typeof system_key == "string") {
-        system_key = PrivateKey.FromString(system_key);
-        if (system_key instanceof Error) {
-            return system_key;
-        }
-    }
+    // let system_key: string | PrivateKey | Error = args.system_key;
+    // if (typeof system_key == "string") {
+    //     system_key = PrivateKey.FromString(system_key);
+    //     if (system_key instanceof Error) {
+    //         return system_key;
+    //     }
+    // }
     // argument checking done
     //-----------------------
 
@@ -164,7 +160,7 @@ export async function run(args: {
     const policyStore = new PolicyStore({
         default_policy,
         kv,
-        system_account: system_key,
+        // system_account: system_key,
         initial_policies: await get_all_policies(),
         db,
     });

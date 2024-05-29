@@ -43,33 +43,38 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
     }
 
     const { socket, response } = Deno.upgradeWebSocket(req);
+    if (args.auth_required) {
+        const url = new URL(req.url);
+        const auth = url.searchParams.get("auth");
+        if (auth == null || auth == "") {
+            // https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4
+            // https://www.iana.org/assignments/websocket/websocket.xml#close-code-number
+            socket.close(3000, "no auth event found");
+            return response;
+        }
+        const rawEvent = atobSafe(auth);
+        console.log(rawEvent);
+        if (rawEvent instanceof Error) {
+            socket.close(3000, rawEvent.message);
+            return response;
+        }
+        const event = parseJSON<NostrEvent>(rawEvent);
+        if (event instanceof Error) {
+            console.error(event);
+            socket.close(3000, "invalid auth event format");
+            return response;
+        }
+        const policy = await args.resolvePolicyByKind(NostrKind.TEXT_NOTE);
+        if (!policy.allow.has(event.pubkey)) {
+            socket.close(3000, `pubkey ${event.pubkey} is not allowed`);
+            console.log("not allowed");
+            return response;
+        }
+    }
 
     socket.onopen = ((socket: WebSocket) => async (e) => {
         console.log("a client connected!", info.remoteAddr);
 
-        if (args.auth_required) {
-            const url = new URL(req.url);
-            const auth = url.searchParams.get("auth");
-            if (auth == null || auth == "") {
-                // https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4
-                // https://www.iana.org/assignments/websocket/websocket.xml#close-code-number
-                socket.close(3000, "no auth event found");
-                return response;
-            }
-            const rawEvent = atobSafe(auth);
-            if (rawEvent instanceof Error) {
-                socket.close(3000, rawEvent.message);
-                return response;
-            }
-            const event = parseJSON<NostrEvent>(rawEvent);
-            if (event instanceof Error) {
-                return new Response("invalid auth event format", { status: 401 });
-            }
-            const policy = await args.resolvePolicyByKind(NostrKind.TEXT_NOTE);
-            if (!policy.allow.has(event.pubkey)) {
-                return new Response(`pubkey ${event.pubkey} is not allowed`, { status: 401 });
-            }
-        }
         connections.set(socket, new Map());
     })(socket);
 

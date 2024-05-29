@@ -9,7 +9,6 @@ const relay = await run({
         name: "Relayed",
         description: "A lightweight relay written in Deno",
     },
-    system_key: "",
 });
 if (relay instanceof Error) {
     console.error(relay);
