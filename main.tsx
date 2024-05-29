@@ -19,8 +19,6 @@ import { Policies } from "./resolvers/policy.ts";
 import {
     event_schema_sqlite,
     func_GetEventCount,
-    func_GetEventsByAuthors,
-    func_GetReplaceableEvents,
     func_WriteReplaceableEvent,
     write_regular_event_sqlite,
     write_replaceable_event_sqlite,
@@ -33,7 +31,7 @@ import {
     RelayInformationStore,
     RelayInformationStringify,
 } from "./resolvers/nip11.ts";
-import { func_GetEventsByFilter, func_GetEventsByIDs, func_WriteRegularEvent } from "./resolvers/event.ts";
+import { func_GetEventsByFilter, func_WriteRegularEvent } from "./resolvers/event.ts";
 import { Cookie, getCookies, setCookie } from "https://deno.land/std@0.224.0/http/cookie.ts";
 import { Event_V2, Kind_V2 } from "./events.ts";
 import {
@@ -47,7 +45,6 @@ import {
 import { func_GetChannelByID } from "./channel.ts";
 import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
 import { get_relay_members } from "./resolvers/policy.ts";
-import { get_event_by_id } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/relay-single-test.ts";
 import { get_events_by_filter_sqlite } from "./resolvers/event.ts";
 import { get_event_count_sqlite } from "./resolvers/event.ts";
 import {
@@ -89,6 +86,7 @@ export type Relay = {
     }) => Promise<Policy | Error>;
     // channel
     get_channel_by_id: func_GetChannelByID;
+    [Symbol.asyncDispose]: () => Promise<void>;
 };
 
 const ENV_relayed_pubkey = "relayed_pubkey";
@@ -98,7 +96,6 @@ export async function run(args: {
     admin?: PublicKey;
     default_policy: DefaultPolicy;
     default_information?: RelayInformationStringify;
-    system_key: string | PrivateKey;
     kv?: Deno.Kv;
     _debug?: boolean;
 }): Promise<Error | Relay> {
@@ -141,13 +138,13 @@ export async function run(args: {
     }
 
     // Relay Key
-    let system_key: string | PrivateKey | Error = args.system_key;
-    if (typeof system_key == "string") {
-        system_key = PrivateKey.FromString(system_key);
-        if (system_key instanceof Error) {
-            return system_key;
-        }
-    }
+    // let system_key: string | PrivateKey | Error = args.system_key;
+    // if (typeof system_key == "string") {
+    //     system_key = PrivateKey.FromString(system_key);
+    //     if (system_key instanceof Error) {
+    //         return system_key;
+    //     }
+    // }
     // argument checking done
     //-----------------------
 
@@ -163,7 +160,7 @@ export async function run(args: {
     const policyStore = new PolicyStore({
         default_policy,
         kv,
-        system_account: system_key,
+        // system_account: system_key,
         initial_policies: await get_all_policies(),
         db,
     });
@@ -171,6 +168,7 @@ export async function run(args: {
         kv,
         {
             ...args.default_information,
+            auth_required: args.default_information?.auth_required || false,
             pubkey: admin_pubkey,
         },
     );
@@ -214,15 +212,16 @@ export async function run(args: {
 
     // const get_channel_by_id = get_channel_by_id_kv(kv)
 
+    const shutdown = async () => {
+        await server.shutdown();
+        args.kv?.close();
+        db?.close();
+    };
     return {
         server,
         ws_url: `ws://${await hostname}:${port}`,
         http_url: `http://${await hostname}:${port}`,
-        shutdown: async () => {
-            await server.shutdown();
-            args.kv?.close();
-            db?.close();
-        },
+        shutdown,
         // policy
         set_policy: policyStore.set_policy,
         get_policy: policyStore.resolvePolicyByKind,
@@ -240,6 +239,9 @@ export async function run(args: {
         // channel
         get_channel_by_id: (id: string) => {
             return get_channel_by_id(id);
+        },
+        [Symbol.asyncDispose]() {
+            return shutdown();
         },
     };
 }
@@ -275,8 +277,8 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
     if (args._debug) {
         console.log(req);
     }
-    const { pathname, protocol } = new URL(req.url);
-    if (pathname === "/api/auth/login") {
+    const url = new URL(req.url);
+    if (url.pathname === "/api/auth/login") {
         const body = await req.json();
         if (!body) {
             return new Response(`{"errors":"request body is null"}`, { status: 400 });
@@ -300,19 +302,27 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
             return resp;
         }
     }
-    if (pathname == "/api") {
+    if (url.pathname == "/api") {
         return graphql_handler(args)(req);
     }
-    if (pathname == "/") {
+    if (url.pathname == "/") {
         if (req.method == "GET") {
-            if (protocol == "http:" || protocol == "https:") {
+            if (url.protocol == "http:" || url.protocol == "https:") {
                 if (req.headers.get("accept")?.includes("text/html")) {
                     return landing_handler(args);
                 }
                 if (req.headers.get("accept")?.includes("application/nostr+json")) {
                     return information_handler(args);
                 } else {
-                    return ws_handler(args)(req, info);
+                    const relay_info = await args.relayInformationStore.resolveRelayInformation();
+                    if (relay_info instanceof Error) {
+                        console.error(relay_info);
+                        return new Response("", { status: 500 });
+                    }
+                    return ws_handler({
+                        ...args,
+                        auth_required: relay_info.auth_required,
+                    })(req, info);
                 }
             }
         } else if (req.method == "POST") {
@@ -382,7 +392,18 @@ async (req: Request) => {
                 return new Response(`{"errors":"no token"}`);
             }
 
-            const event = JSON.parse(atob(token));
+            const rawEvent = atobSafe(token);
+            if (rawEvent instanceof Error) {
+                return new Response(JSON.stringify({
+                    errors: [`${rawEvent.message}`],
+                }));
+            }
+            const event = parseJSON<NostrEvent>(rawEvent);
+            if (event instanceof Error) {
+                return new Response(JSON.stringify({
+                    errors: [`${event.message}`],
+                }));
+            }
             const error = await verifyToken(event, args.relayInformationStore);
             if (error instanceof Error) {
                 return new Response(JSON.stringify({
@@ -573,3 +594,11 @@ const graphiql = `
     </script>
   </body>
 </html>`;
+
+export function atobSafe(data) {
+    try {
+        return atob(data);
+    } catch (e) {
+        return e as Error;
+    }
+}

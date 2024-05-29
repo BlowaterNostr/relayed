@@ -6,7 +6,6 @@ import { fail } from "https://deno.land/std@0.202.0/assert/fail.ts";
 import {
     _RelayResponse_Event,
     InMemoryAccountContext,
-    NostrEvent,
     NostrKind,
     prepareNormalNostrEvent,
     PrivateKey,
@@ -43,11 +42,12 @@ Deno.test({
         const relay = await run({
             default_information: {
                 pubkey: test_ctx.publicKey.hex,
+                auth_required: false,
             },
             default_policy: {
                 allowed_kinds: [NostrKind.Long_Form, NostrKind.Encrypted_Custom_App_Data],
             },
-            system_key: PrivateKey.Generate(),
+            // system_key: PrivateKey.Generate(),
             kv: await test_kv(),
         }) as Relay;
 
@@ -170,12 +170,13 @@ Deno.test({
         const relay = await run({
             default_information: {
                 pubkey: test_ctx.publicKey.hex,
+                auth_required: false,
             },
             default_policy: {
                 allowed_kinds: "none",
             },
             kv: await test_kv(),
-            system_key: PrivateKey.Generate(),
+            // system_key: PrivateKey.Generate(),
         }) as Relay;
 
         const ctx1 = InMemoryAccountContext.Generate();
@@ -226,12 +227,13 @@ Deno.test({
         const relay = await run({
             default_information: {
                 pubkey: test_ctx.publicKey.hex,
+                auth_required: false,
             },
             default_policy: {
                 allowed_kinds: "none",
             },
             kv: await test_kv(),
-            system_key: PrivateKey.Generate(),
+            // system_key: PrivateKey.Generate(),
         });
         if (relay instanceof Error) {
             console.error(relay);
@@ -294,16 +296,17 @@ Deno.test({
     name: "NIP-11: Relay Information Document",
     // ignore: true,
     fn: async (t) => {
-        const relay = await run({
+        await using relay = await run({
             default_policy: {
                 allowed_kinds: "none",
             },
             default_information: {
                 name: "Nostr Relay",
                 pubkey: test_ctx.publicKey.hex,
+                auth_required: false,
             },
             kv: await test_kv(),
-            system_key: PrivateKey.Generate(),
+            // system_key: PrivateKey.Generate(),
         }) as Relay;
 
         await t.step("get relay information", async () => {
@@ -313,6 +316,7 @@ Deno.test({
                 pubkey: test_ctx.publicKey,
                 software,
                 supported_nips,
+                auth_required: false,
             });
         });
 
@@ -330,6 +334,7 @@ Deno.test({
                 },
                 software,
                 supported_nips,
+                auth_required: false,
             });
         });
 
@@ -369,8 +374,6 @@ Deno.test({
                 supported_nips,
             });
         });
-
-        await relay.shutdown();
     },
 });
 

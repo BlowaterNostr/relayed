@@ -30,7 +30,7 @@ export class PolicyStore {
         private readonly args: {
             default_policy: DefaultPolicy;
             kv: Deno.Kv;
-            system_account: PrivateKey;
+            // system_account: PrivateKey;
             initial_policies: Policy[];
             db?: DB;
         },

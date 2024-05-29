@@ -6,6 +6,7 @@ type RelayInfomationBase = {
     description?: string;
     contact?: string;
     icon?: string;
+    auth_required: boolean;
 };
 
 export type RelayInformationStringify = {
@@ -25,6 +26,7 @@ export type RelayInformation = {
     software?: string;
     version?: string;
     icon?: string;
+    auth_required: boolean;
 };
 
 export class RelayInformationStore {
