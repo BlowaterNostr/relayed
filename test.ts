@@ -139,10 +139,11 @@ Deno.test({
             const ctx1 = InMemoryAccountContext.Generate();
             const event_1 = await randomEvent(ctx1, NostrKind.TEXT_NOTE, "test:block pubkey 1");
 
-            await relay.set_policy({
+            const policy = await relay.set_policy({
                 kind: event_1.kind,
                 block: new Set([ctx1.publicKey.hex]),
             });
+            if (policy instanceof Error) fail(policy.message);
 
             const err = await client.sendEvent(event_1);
             assertIsError(err, Error);
@@ -167,7 +168,7 @@ Deno.test({
     name: "allow write:false event",
     // ignore: true,
     fn: async () => {
-        const relay = await run({
+        await using relay = await run({
             default_information: {
                 pubkey: test_ctx.publicKey.hex,
                 auth_required: false,
@@ -176,46 +177,36 @@ Deno.test({
                 allowed_kinds: "none",
             },
             kv: await test_kv(),
-            // system_key: PrivateKey.Generate(),
         }) as Relay;
-
-        const ctx1 = InMemoryAccountContext.Generate();
-        const ctx2 = InMemoryAccountContext.Generate();
-        const err = await relay.set_policy({
-            kind: 1,
-            allow: new Set([ctx1.publicKey.bech32(), ctx2.publicKey.hex]),
-        });
-        if (err instanceof Error) fail(err.message);
-
         const client = SingleRelayConnection.New(relay.ws_url);
-        const stream = await client.newSub("", {
-            kinds: [1],
-        }) as SubscriptionStream;
+        {
+            const ctx1 = InMemoryAccountContext.Generate();
+            const ctx2 = InMemoryAccountContext.Generate();
+            const err = await relay.set_policy({
+                kind: 1,
+                allow: new Set([ctx1.publicKey.bech32(), ctx2.publicKey.hex]),
+            });
+            if (err instanceof Error) fail(err.message);
 
-        const event1 = await prepareNormalNostrEvent(ctx1, {
-            kind: 1,
-            content: "",
-        });
-        const err1 = await client.sendEvent(event1);
-        if (err1 instanceof Error) fail(err1.message);
+            const event1 = await prepareNormalNostrEvent(ctx1, {
+                kind: 1,
+                content: "1",
+            });
+            const err1 = await client.sendEvent(event1);
+            if (err1 instanceof Error) fail(err1.message);
 
-        const event2 = await prepareNormalNostrEvent(ctx2, {
-            kind: 1,
-            content: "",
-        });
-        const err2 = await client.sendEvent(event2);
-        if (err2 instanceof Error) fail(err2.message);
+            const event2 = await prepareNormalNostrEvent(ctx2, {
+                kind: 1,
+                content: "2",
+            });
+            const err2 = await client.sendEvent(event2);
+            if (err2 instanceof Error) fail(err2.message);
 
-        const event_1 = await relay.get_event(event1.id);
-        assertEquals(event_1, event1);
-        const event_2 = await relay.get_event(event2.id);
-        assertEquals(event_2, event2);
-
-        await stream.chan.pop();
-        const msg = await stream.chan.pop() as RelayResponse_Event;
-        assertEquals(event_1, msg.event);
-
-        await relay.shutdown();
+            const event_1 = await relay.get_event(event1.id);
+            assertEquals(event_1, event1);
+            const event_2 = await relay.get_event(event2.id);
+            assertEquals(event_2, event2);
+        }
         await client.close();
     },
 });

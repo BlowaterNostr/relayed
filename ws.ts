@@ -18,10 +18,10 @@ import {
     PublicKey,
     verifyEvent,
 } from "./_libs.ts";
-import { NoteID } from "https://raw.githubusercontent.com/BlowaterNostr/nostr.ts/main/nip19.ts";
-
 import { func_GetEventsByFilter } from "./resolvers/event.ts";
 import { func_DeleteEvent } from "./resolvers/event_deletion.ts";
+
+export type func_IsMember = (pubkey: string) => Promise<boolean | Error>;
 
 export const ws_handler = (
     args: {
@@ -32,6 +32,7 @@ export const ws_handler = (
         write_regular_event: func_WriteRegularEvent;
         write_replaceable_event: func_WriteReplaceableEvent;
         delete_event: func_DeleteEvent;
+        is_member: func_IsMember;
         auth_required: boolean;
     },
 ) =>
@@ -43,38 +44,39 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
     }
 
     const { socket, response } = Deno.upgradeWebSocket(req);
-    if (args.auth_required) {
-        const url = new URL(req.url);
-        const auth = url.searchParams.get("auth");
-        if (auth == null || auth == "") {
-            // https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4
-            // https://www.iana.org/assignments/websocket/websocket.xml#close-code-number
-            socket.close(3000, "no auth event found");
-            return response;
-        }
-        const rawEvent = atobSafe(auth);
-        console.log(rawEvent);
-        if (rawEvent instanceof Error) {
-            socket.close(3000, rawEvent.message);
-            return response;
-        }
-        const event = parseJSON<NostrEvent>(rawEvent);
-        if (event instanceof Error) {
-            console.error(event);
-            socket.close(3000, "invalid auth event format");
-            return response;
-        }
-        const policy = await args.resolvePolicyByKind(NostrKind.TEXT_NOTE);
-        if (!policy.allow.has(event.pubkey)) {
-            socket.close(3000, `pubkey ${event.pubkey} is not allowed`);
-            console.log("not allowed");
-            return response;
-        }
-    }
 
     socket.onopen = ((socket: WebSocket) => async (e) => {
         console.log("a client connected!", info.remoteAddr);
-
+        if (args.auth_required) {
+            console.log("check auth");
+            const url = new URL(req.url);
+            const auth = url.searchParams.get("auth");
+            if (auth == null || auth == "") {
+                // https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4
+                // https://www.iana.org/assignments/websocket/websocket.xml#close-code-number
+                socket.close(3000, "no auth event found");
+                return;
+            }
+            const rawEvent = atobSafe(auth);
+            if (rawEvent instanceof Error) {
+                socket.close(3000, rawEvent.message);
+                return;
+            }
+            const event = parseJSON<NostrEvent>(rawEvent);
+            if (event instanceof Error) {
+                console.error(event);
+                socket.close(3000, "invalid auth event format");
+                return;
+            }
+            const ok = await args.is_member(event.pubkey);
+            if (!ok) {
+                socket.close(3000, `pubkey ${event.pubkey} is not allowed`);
+                console.log("not allowed");
+                // @ts-ignore
+                // response.status = 500;
+                return;
+            }
+        }
         connections.set(socket, new Map());
     })(socket);
 
@@ -176,7 +178,7 @@ async function handle_cmd_event(args: {
     { // check if allowed to write
         const author = PublicKey.FromHex(event.pubkey) as PublicKey;
         if (policy.write) {
-            if (policy.block.has(author.bech32())) {
+            if (policy.block.has(author.hex)) {
                 return send(
                     this_socket,
                     JSON.stringify(
@@ -189,7 +191,7 @@ async function handle_cmd_event(args: {
                 );
             }
         } else {
-            if (!policy.allow.has(author.bech32()) && !policy.allow.has(author.hex)) {
+            if (!policy.allow.has(author.hex) && !policy.allow.has(author.hex)) {
                 return send(
                     this_socket,
                     JSON.stringify(
@@ -239,7 +241,7 @@ async function handle_cmd_event(args: {
         )
     ) {
         const pub = PublicKey.FromHex(event.pubkey) as PublicKey;
-        if (policy.read == false && !policy.allow.has(event.pubkey) && !policy.allow.has(pub.bech32())) {
+        if (policy.read == false && !policy.allow.has(event.pubkey) && !policy.allow.has(pub.hex)) {
             return;
         }
         send_event_to_subscription(matched.socket, event, matched.sub_id, matched.filter);
@@ -284,8 +286,7 @@ async function handle_cmd_req(
         const event_candidates = await args.get_events_by_filter(filter);
         for (const event of event_candidates) {
             const policy = await args.resolvePolicyByKind(event.kind);
-            const pubkey = PublicKey.FromHex(event.pubkey) as PublicKey;
-            if (policy.read == false && !policy.allow.has(pubkey.hex) && !policy.allow.has(pubkey.bech32())) {
+            if (policy.read == false && !policy.allow.has(event.pubkey)) {
                 continue;
             }
             send(this_socket, JSON.stringify(respond_event(sub_id, event)));

@@ -1,5 +1,5 @@
 import { typeDefs } from "./graphql-schema.ts";
-import { SubscriptionMap, ws_handler } from "./ws.ts";
+import { func_IsMember, SubscriptionMap, ws_handler } from "./ws.ts";
 import { render } from "https://esm.sh/preact-render-to-string@6.4.1";
 import { RootResolver } from "./resolvers/root.ts";
 import * as gql from "https://esm.sh/graphql@16.8.1";
@@ -159,10 +159,8 @@ export async function run(args: {
     const get_all_policies = Policies(kv);
     const policyStore = new PolicyStore({
         default_policy,
-        kv,
-        // system_account: system_key,
         initial_policies: await get_all_policies(),
-        db,
+        kv,
     });
     const relayInformationStore = new RelayInformationStore(
         kv,
@@ -186,6 +184,18 @@ export async function run(args: {
         },
         root_handler({
             ...args,
+            is_member: async (pubkey: string) => {
+                const key = PublicKey.FromString(pubkey);
+                if (key instanceof Error) {
+                    return key;
+                }
+                // admin is always a member
+                if (key.hex == args.default_information?.pubkey) {
+                    return true;
+                }
+                const policy = await policyStore.resolvePolicyByKind(NostrKind.TEXT_NOTE);
+                return policy.allow.has(pubkey) && !policy.block.has(pubkey);
+            },
             // deletion
             delete_event: delete_event_sqlite(db),
             delete_events_from_pubkey: async () => {
@@ -214,7 +224,7 @@ export async function run(args: {
 
     const shutdown = async () => {
         await server.shutdown();
-        args.kv?.close();
+        kv.close();
         db?.close();
     };
     return {
@@ -253,7 +263,7 @@ const root_handler = (
         resolvePolicyByKind: func_ResolvePolicyByKind;
         policyStore: PolicyStore;
         relayInformationStore: RelayInformationStore;
-        // get_channel_by_name: func_GetChannelByName;
+        is_member: func_IsMember;
         // channel
         create_channel: func_CreateChannel;
         edit_channel: func_EditChannel;
