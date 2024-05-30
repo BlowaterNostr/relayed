@@ -13,7 +13,7 @@ export const Policies = (kv: Deno.Kv) =>
         return res;
     };
 
-export type func_ResolvePolicyByKind = (kind: NostrKind) => Promise<Policy>;
+export type func_ResolvePolicyByKind = (kind: NostrKind) => Promise<Policy | Error>;
 
 export type Policy = {
     kind: NostrKind;
@@ -32,8 +32,13 @@ export class PolicyStore {
         },
     ) {}
 
-    resolvePolicyByKind = async (kind: NostrKind): Promise<Policy> => {
-        const entry = await this.args.kv.get<Policy>(["policy", kind]);
+    resolvePolicyByKind: func_ResolvePolicyByKind = async (kind: NostrKind) => {
+        let entry: Deno.KvEntryMaybe<Policy>;
+        try {
+            entry = await this.args.kv.get<Policy>(["policy", kind]);
+        } catch (e) {
+            return e as Error;
+        }
         const policy = entry.value;
         if (policy == null) {
             const default_policy = this.args.default_policy;
@@ -68,6 +73,9 @@ export class PolicyStore {
         },
     ) => {
         const policy = await this.resolvePolicyByKind(args.kind);
+        if (policy instanceof Error) {
+            return policy;
+        }
         if (args.read != undefined) {
             policy.read = args.read;
         }

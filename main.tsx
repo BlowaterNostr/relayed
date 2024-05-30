@@ -76,7 +76,7 @@ export type Relay = {
     get_relay_information: () => Promise<RelayInformation | Error>;
     // policy
     default_policy: DefaultPolicy;
-    get_policy: (kind: NostrKind) => Promise<Policy>;
+    get_policy: func_ResolvePolicyByKind;
     set_policy: (args: {
         kind: NostrKind;
         read?: boolean | undefined;
@@ -194,6 +194,9 @@ export async function run(args: {
                     return true;
                 }
                 const policy = await policyStore.resolvePolicyByKind(NostrKind.TEXT_NOTE);
+                if (policy instanceof Error) {
+                    return policy;
+                }
                 return policy.allow.has(pubkey) && !policy.block.has(pubkey);
             },
             // deletion

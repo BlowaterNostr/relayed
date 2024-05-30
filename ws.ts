@@ -138,14 +138,20 @@ function onMessage(
         }
         const cmd = nostr_ws_msg[0];
         if (cmd == "EVENT") {
-            await handle_cmd_event({
+            const err = await handle_cmd_event({
                 ...deps,
                 this_socket,
                 connections,
                 nostr_ws_msg,
             });
+            if (err instanceof Error) {
+                console.error(err);
+            }
         } else if (cmd == "REQ") {
-            return handle_cmd_req(nostr_ws_msg, { ...deps, this_socket });
+            const err = await handle_cmd_req(nostr_ws_msg, { ...deps, this_socket });
+            if (err instanceof Error) {
+                console.error(err);
+            }
         } else if (cmd == "CLOSE") {
         } else {
             console.log("not implemented", event.data);
@@ -175,6 +181,9 @@ async function handle_cmd_event(args: {
     }
 
     const policy = await resolvePolicyByKind(event.kind);
+    if (policy instanceof Error) {
+        return policy;
+    }
     { // check if allowed to write
         const author = PublicKey.FromHex(event.pubkey) as PublicKey;
         if (policy.write) {
@@ -286,6 +295,9 @@ async function handle_cmd_req(
         const event_candidates = await args.get_events_by_filter(filter);
         for (const event of event_candidates) {
             const policy = await args.resolvePolicyByKind(event.kind);
+            if (policy instanceof Error) {
+                return policy;
+            }
             if (policy.read == false && !policy.allow.has(event.pubkey)) {
                 continue;
             }

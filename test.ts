@@ -53,8 +53,8 @@ Deno.test({
 
         const policy = await relay.get_policy(NostrKind.CONTACTS);
         assertEquals(policy, {
-            allow: new Set(),
-            block: new Set(),
+            allow: new Set<string>(),
+            block: new Set<string>(),
             kind: NostrKind.CONTACTS,
             read: false,
             write: false,

@@ -83,24 +83,36 @@ export const Mutation = (deps: {
     return {
         add_block: async (args: { kind: number; pubkey: string }) => {
             const policy = await policyStore.resolvePolicyByKind(args.kind);
+            if (policy instanceof Error) {
+                return policy;
+            }
             policy.block.add(args.pubkey);
             await policyStore.set_policy(policy);
             return policy;
         },
         remove_block: async (args: { kind: number; pubkey: string }) => {
             const policy = await policyStore.resolvePolicyByKind(args.kind);
+            if (policy instanceof Error) {
+                return policy;
+            }
             policy.block.delete(args.pubkey);
             await policyStore.set_policy(policy);
             return policy;
         },
         add_allow: async (args: { kind: number; pubkey: string }) => {
             const policy = await policyStore.resolvePolicyByKind(args.kind);
+            if (policy instanceof Error) {
+                return policy;
+            }
             policy.allow.add(args.pubkey);
             await policyStore.set_policy(policy);
             return policy;
         },
         remove_allow: async (args: { kind: number; pubkey: string }) => {
             const policy = await policyStore.resolvePolicyByKind(args.kind);
+            if (policy instanceof Error) {
+                return policy;
+            }
             policy.allow.delete(args.pubkey);
             await policyStore.set_policy(policy);
             return policy;
