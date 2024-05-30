@@ -224,7 +224,7 @@ export async function run(args: {
 
     const shutdown = async () => {
         await server.shutdown();
-        args.kv?.close();
+        kv.close();
         db?.close();
     };
     return {
