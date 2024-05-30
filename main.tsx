@@ -159,10 +159,8 @@ export async function run(args: {
     const get_all_policies = Policies(kv);
     const policyStore = new PolicyStore({
         default_policy,
-        kv,
-        // system_account: system_key,
         initial_policies: await get_all_policies(),
-        db,
+        kv,
     });
     const relayInformationStore = new RelayInformationStore(
         kv,
@@ -195,8 +193,8 @@ export async function run(args: {
                 if (key.hex == args.default_information?.pubkey) {
                     return true;
                 }
-                // todo: change
-                return true;
+                const policy = await policyStore.resolvePolicyByKind(NostrKind.TEXT_NOTE);
+                return policy.allow.has(pubkey) && !policy.block.has(pubkey);
             },
             // deletion
             delete_event: delete_event_sqlite(db),

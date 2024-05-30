@@ -178,7 +178,7 @@ async function handle_cmd_event(args: {
     { // check if allowed to write
         const author = PublicKey.FromHex(event.pubkey) as PublicKey;
         if (policy.write) {
-            if (policy.block.has(author.bech32())) {
+            if (policy.block.has(author.hex)) {
                 return send(
                     this_socket,
                     JSON.stringify(
@@ -191,7 +191,7 @@ async function handle_cmd_event(args: {
                 );
             }
         } else {
-            if (!policy.allow.has(author.bech32()) && !policy.allow.has(author.hex)) {
+            if (!policy.allow.has(author.hex) && !policy.allow.has(author.hex)) {
                 return send(
                     this_socket,
                     JSON.stringify(
@@ -241,7 +241,7 @@ async function handle_cmd_event(args: {
         )
     ) {
         const pub = PublicKey.FromHex(event.pubkey) as PublicKey;
-        if (policy.read == false && !policy.allow.has(event.pubkey) && !policy.allow.has(pub.bech32())) {
+        if (policy.read == false && !policy.allow.has(event.pubkey) && !policy.allow.has(pub.hex)) {
             return;
         }
         send_event_to_subscription(matched.socket, event, matched.sub_id, matched.filter);
@@ -286,8 +286,7 @@ async function handle_cmd_req(
         const event_candidates = await args.get_events_by_filter(filter);
         for (const event of event_candidates) {
             const policy = await args.resolvePolicyByKind(event.kind);
-            const pubkey = PublicKey.FromHex(event.pubkey) as PublicKey;
-            if (policy.read == false && !policy.allow.has(pubkey.hex) && !policy.allow.has(pubkey.bech32())) {
+            if (policy.read == false && !policy.allow.has(event.pubkey)) {
                 continue;
             }
             send(this_socket, JSON.stringify(respond_event(sub_id, event)));
