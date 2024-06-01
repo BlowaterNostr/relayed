@@ -39,29 +39,6 @@ export function isReplaceableEvent(kind: NostrKind) {
     return kind == NostrKind.META_DATA || kind == NostrKind.CONTACTS || (10000 <= kind && kind < 20000);
 }
 
-function isMatched(event: NostrEvent, filter: NostrFilter) {
-    const kinds = filter.kinds || [];
-    const authors = filter.authors || [];
-    const ids = filter.ids || [];
-    const ps = filter["#p"] || [];
-    const es = filter["#e"] || [];
-
-    const match_kind = kinds.length == 0 ? true : kinds.includes(event.kind);
-    const match_author = authors.length == 0 ? true : authors.includes(event.pubkey);
-    const match_id = ids.length == 0 ? true : ids.includes(event.id);
-    const match_p_tag = ps.length == 0 ? true : ps.includes(event.pubkey);
-    const match_e_tag = es.length == 0 ? true : es.includes(event.id);
-    return (
-        match_kind &&
-        match_author &&
-        match_id &&
-        match_p_tag &&
-        match_e_tag
-    ) ||
-        (kinds.length == 0 && authors.length == 0 && ids.length == 0 &&
-            ps.length == 0 && es.length == 0);
-}
-
 export const event_schema_sqlite = `
 CREATE TABLE IF NOT exists events_v1 (
     id         TEXT    PRIMARY KEY,
@@ -172,15 +149,3 @@ export const get_event_count_sqlite = (db: DB): func_GetEventCount => async () =
     const rows = db.query<[number, number]>(`SELECT kind, count(*) as count FROM events_v1 group by kind`);
     return new Map(rows);
 };
-
-Deno.test("isMatched", async () => {
-    const ctx = InMemoryAccountContext.Generate();
-    const event = await prepareNormalNostrEvent(ctx, {
-        content: "",
-        kind: 1,
-    });
-    const is = isMatched(event, {
-        limit: 1,
-    });
-    assertEquals(is, true);
-});

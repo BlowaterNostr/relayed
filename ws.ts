@@ -350,7 +350,7 @@ function* matchEventWithSubscriptions(
     }
 }
 
-export function isMatched(event: NostrEvent, subscription: Subscription) {
+function isMatched(event: NostrEvent, subscription: Subscription) {
     for (const _filter of subscription) {
         const filter = _filter.filter;
         const kinds = filter.kinds || [];
