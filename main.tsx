@@ -99,8 +99,6 @@ export async function run(args: {
     kv?: Deno.Kv;
     _debug?: boolean;
 }): Promise<Error | Relay> {
-    const isDenoDeploy = Deno.env.get("DENO_DEPLOYMENT_ID") !== undefined;
-
     //------------------
     // argument checking
     // Deno KV
