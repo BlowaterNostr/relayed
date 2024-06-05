@@ -20,6 +20,7 @@ import {
 } from "./_libs.ts";
 import { func_GetEventsByFilter } from "./resolvers/event.ts";
 import { func_DeleteEvent } from "./resolvers/event_deletion.ts";
+import { sleep } from "https://raw.githubusercontent.com/BlowaterNostr/csp/master/csp.ts";
 
 export type func_IsMember = (pubkey: string) => Promise<boolean | Error>;
 
@@ -54,11 +55,13 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
             if (auth == null || auth == "") {
                 // https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4
                 // https://www.iana.org/assignments/websocket/websocket.xml#close-code-number
+                console.error("no auth event found");
                 socket.close(3000, "no auth event found");
                 return;
             }
             const rawEvent = atobSafe(auth);
             if (rawEvent instanceof Error) {
+                console.error(rawEvent);
                 socket.close(3000, rawEvent.message);
                 return;
             }

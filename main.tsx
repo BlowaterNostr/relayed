@@ -188,7 +188,7 @@ export async function run(args: {
                     return key;
                 }
                 // admin is always a member
-                if (key.hex == args.default_information?.pubkey) {
+                if (key.hex == admin_pubkey.hex) {
                     return true;
                 }
                 const policy = await policyStore.resolvePolicyByKind(NostrKind.TEXT_NOTE);
