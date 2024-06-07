@@ -1,17 +1,12 @@
 import { software, supported_nips } from "../main.tsx";
 import { PublicKey } from "../nostr.ts/key.ts";
 
-type RelayInfomationBase = {
+export type RelayInfomationBase = {
     name?: string;
     description?: string;
     contact?: string;
     icon?: string;
-    auth_required: boolean;
 };
-
-export type RelayInformationStringify = {
-    pubkey?: string;
-} & RelayInfomationBase;
 
 export type RelayInformationParsed = {
     pubkey?: PublicKey;
@@ -26,7 +21,6 @@ export type RelayInformation = {
     software?: string;
     version?: string;
     icon?: string;
-    auth_required: boolean;
 };
 
 export class RelayInformationStore {
@@ -61,11 +55,4 @@ export class RelayInformationStore {
         await this.kv.set(["relay_information"], new_information);
         return { ...this.default_information, ...new_information, software, supported_nips };
     };
-}
-
-export function informationPubkeyStringify(info: RelayInformationParsed): RelayInformationStringify {
-    if (!info.pubkey) {
-        return info as RelayInfomationBase;
-    }
-    return { ...info, pubkey: info.pubkey.hex };
 }

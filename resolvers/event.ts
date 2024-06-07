@@ -16,7 +16,7 @@ export type interface_GetEventsByAuthors = {
     get_events_by_authors: func_GetEventsByAuthors;
 };
 
-export type func_GetEventsByFilter = (filter: NostrFilter) => Promise<NostrEvent[]>;
+export type func_GetEventsByFilter = (filter: NostrFilter) => Promise<NostrEvent[] | SqliteError>;
 
 export type func_WriteRegularEvent = (event: NostrEvent) => Promise<boolean | Error>;
 
@@ -84,7 +84,12 @@ export const get_events_by_filter_sqlite =
         params.push(filter.limit || 200);
 
         console.log(sql, "\n", params, "\n", filter);
-        const results = db.query<[string]>(sql, params);
+        let results: [string][];
+        try {
+            results = db.query<[string]>(sql, params);
+        } catch (e) {
+            return e as SqliteError;
+        }
         return results.map((r) => JSON.parse(r[0]) as NostrEvent);
     };
 

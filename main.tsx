@@ -16,12 +16,7 @@ import {
 } from "./resolvers/event.ts";
 import Landing from "./routes/landing.tsx";
 import Error404 from "./routes/_404.tsx";
-import {
-    informationPubkeyStringify,
-    RelayInformation,
-    RelayInformationStore,
-    RelayInformationStringify,
-} from "./resolvers/nip11.ts";
+import { RelayInfomationBase, RelayInformation, RelayInformationStore } from "./resolvers/nip11.ts";
 import { func_GetEventsByFilter, func_WriteRegularEvent } from "./resolvers/event.ts";
 import { Cookie, getCookies, setCookie } from "https://deno.land/std@0.224.0/http/cookie.ts";
 import { Event_V2, Kind_V2 } from "./events.ts";
@@ -89,8 +84,9 @@ const ENV_relayed_pubkey = "relayed_pubkey";
 export async function run(args: {
     port?: number;
     admin?: PublicKey;
+    auth_required: boolean;
     default_policy: DefaultPolicy;
-    default_information?: RelayInformationStringify;
+    default_information?: RelayInfomationBase;
     kv?: Deno.Kv;
     _debug?: boolean;
 }): Promise<Error | Relay> {
@@ -114,22 +110,19 @@ export async function run(args: {
     const get_events_by_filter = get_events_by_filter_sqlite(db);
 
     // Administrator Keys
-    let admin_pubkey: string | undefined | PublicKey | Error = args.default_information?.pubkey;
-    if (admin_pubkey == undefined) {
+    if (args.admin == undefined) {
         const env_pubkey = Deno.env.get(ENV_relayed_pubkey);
         if (env_pubkey == undefined) {
             return new Error(
                 "public key is not set. Please set env var $relayed_pubkey or pass default_information.pubkey in the argument",
             );
         }
-        admin_pubkey = env_pubkey;
+        const p = PublicKey.FromString(env_pubkey);
+        if (p instanceof Error) {
+            return p;
+        }
+        args.admin = p;
     }
-
-    admin_pubkey = PublicKey.FromString(admin_pubkey);
-    if (admin_pubkey instanceof Error) {
-        return admin_pubkey;
-    }
-
     // Relay Key
     // let system_key: string | PrivateKey | Error = args.system_key;
     // if (typeof system_key == "string") {
@@ -159,8 +152,7 @@ export async function run(args: {
         kv,
         {
             ...args.default_information,
-            auth_required: args.default_information?.auth_required || false,
-            pubkey: admin_pubkey,
+            pubkey: args.admin,
         },
     );
 
@@ -177,21 +169,23 @@ export async function run(args: {
         },
         root_handler({
             ...args,
-            is_member: async (pubkey: string) => {
+            is_member: ((admin: PublicKey) => async (pubkey: string) => {
                 const key = PublicKey.FromString(pubkey);
                 if (key instanceof Error) {
                     return key;
                 }
                 // admin is always a member
-                if (key.hex == admin_pubkey.hex) {
+                if (key.hex == admin.hex) {
                     return true;
                 }
                 const policy = await policyStore.resolvePolicyByKind(NostrKind.TEXT_NOTE);
                 if (policy instanceof Error) {
                     return policy;
                 }
-                return policy.allow.has(pubkey) && !policy.block.has(pubkey);
-            },
+                const policyAllow = policy.allow.has(pubkey);
+                const policyBlock = policy.block.has(pubkey);
+                return policyAllow && !policyBlock;
+            })(args.admin),
             // deletion
             delete_event: delete_event_sqlite(db),
             delete_events_from_pubkey: async () => {
@@ -220,6 +214,10 @@ export async function run(args: {
 
     const shutdown = async () => {
         await server.shutdown();
+        for (const socket of connections.keys()) {
+            socket.close();
+        }
+        console.log("close db");
         kv.close();
         db?.close();
     };
@@ -275,6 +273,8 @@ const root_handler = (
         write_replaceable_event: func_WriteReplaceableEvent;
         // relay
         get_relay_members: func_GetRelayMembers;
+        // config
+        auth_required: boolean;
         kv: Deno.Kv;
         _debug: boolean;
     },
@@ -327,7 +327,6 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
                     }
                     return ws_handler({
                         ...args,
-                        auth_required: relay_info.auth_required,
                     })(req, info);
                 }
             }
@@ -457,8 +456,7 @@ const information_handler = async (args: { relayInformationStore: RelayInformati
     if (storeInformation instanceof Error) {
         return new Response(render(Error404()), { status: 404 });
     }
-    const information = informationPubkeyStringify(storeInformation);
-    const resp = new Response(JSON.stringify(information), {
+    const resp = new Response(JSON.stringify(storeInformation), {
         status: 200,
     });
     resp.headers.set("content-type", "application/json; charset=utf-8");

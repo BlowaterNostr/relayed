@@ -1,7 +1,7 @@
 // deno-lint-ignore-file no-empty
 import { Relay, run, software, supported_nips } from "./main.tsx";
 import { assertEquals } from "https://deno.land/std@0.202.0/assert/assert_equals.ts";
-import { assertIsError } from "https://deno.land/std@0.202.0/assert/mod.ts";
+import { assertIsError, assertNotInstanceOf } from "https://deno.land/std@0.202.0/assert/mod.ts";
 import { fail } from "https://deno.land/std@0.202.0/assert/fail.ts";
 
 import * as client_test from "./nostr.ts/relay-single-test.ts";
@@ -33,10 +33,8 @@ Deno.test({
     // ignore: true,
     fn: async (t) => {
         const relay = await run({
-            default_information: {
-                pubkey: test_ctx.publicKey.hex,
-                auth_required: false,
-            },
+            auth_required: false,
+            admin: test_ctx.publicKey,
             default_policy: {
                 allowed_kinds: [NostrKind.Long_Form, NostrKind.Encrypted_Custom_App_Data],
             },
@@ -162,10 +160,8 @@ Deno.test({
     // ignore: true,
     fn: async () => {
         await using relay = await run({
-            default_information: {
-                pubkey: test_ctx.publicKey.hex,
-                auth_required: false,
-            },
+            auth_required: false,
+            admin: test_ctx.publicKey,
             default_policy: {
                 allowed_kinds: "none",
             },
@@ -209,10 +205,8 @@ Deno.test({
     // ignore: true,
     fn: async () => {
         const relay = await run({
-            default_information: {
-                pubkey: test_ctx.publicKey.hex,
-                auth_required: false,
-            },
+            auth_required: false,
+            admin: test_ctx.publicKey,
             default_policy: {
                 allowed_kinds: "none",
             },
@@ -286,9 +280,9 @@ Deno.test({
             },
             default_information: {
                 name: "Nostr Relay",
-                pubkey: test_ctx.publicKey.hex,
-                auth_required: false,
             },
+            auth_required: false,
+            admin: test_ctx.publicKey,
             kv: await test_kv(),
             // system_key: PrivateKey.Generate(),
         }) as Relay;
@@ -300,7 +294,6 @@ Deno.test({
                 pubkey: test_ctx.publicKey,
                 software,
                 supported_nips,
-                auth_required: false,
             });
         });
 
@@ -318,7 +311,6 @@ Deno.test({
                 },
                 software,
                 supported_nips,
-                auth_required: false,
             });
         });
 
@@ -358,6 +350,59 @@ Deno.test({
                 supported_nips,
             });
         });
+    },
+});
+
+Deno.test({
+    name: "Authorization",
+    // ignore: true,
+    fn: async (t) => {
+        const pri = PrivateKey.Generate();
+        const relay = await run({
+            admin: pri.toPublicKey(),
+            kv: await test_kv(),
+            default_policy: {
+                allowed_kinds: "all",
+            },
+            auth_required: true,
+        });
+        if (relay instanceof Error) fail(relay.message);
+        const admin = InMemoryAccountContext.FromString(pri.hex) as Signer;
+
+        await t.step("admin is always allowed", async () => {
+            const client = SingleRelayConnection.New(relay.ws_url, {
+                signer: admin,
+            });
+            const err = await client.newSub("", {});
+            assertNotInstanceOf(err, Error);
+            await client.close();
+        });
+
+        await t.step("a member is allowed", async () => {
+            const user = InMemoryAccountContext.Generate();
+            await relay.set_policy({
+                kind: NostrKind.TEXT_NOTE,
+                allow: new Set([user.publicKey.hex]),
+            });
+            const client = SingleRelayConnection.New(relay.ws_url, {
+                signer: user,
+            });
+            await sleep(10);
+            const err = await client.newSub("", {});
+            if (err instanceof Error) fail(err.message);
+            await client.close();
+        });
+
+        await t.step("stranger is blocked", async () => {
+            const client = SingleRelayConnection.New(relay.ws_url, {
+                signer: InMemoryAccountContext.Generate(),
+            });
+            await sleep(10);
+            const err = await client.newSub("", {});
+            assertIsError(err, Error);
+            await client.close();
+        });
+        await relay.shutdown();
     },
 });
 
