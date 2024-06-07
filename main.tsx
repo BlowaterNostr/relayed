@@ -10,7 +10,11 @@ import { Policies } from "./resolvers/policy.ts";
 import {
     event_schema_sqlite,
     func_GetEventCount,
+    func_GetEventsByFilter,
+    func_WriteRegularEvent,
     func_WriteReplaceableEvent,
+    get_event_count_sqlite,
+    get_events_by_filter_sqlite,
     write_regular_event_sqlite,
     write_replaceable_event_sqlite,
 } from "./resolvers/event.ts";
@@ -25,24 +29,33 @@ import {
     edit_channel_sqlite,
     func_CreateChannel,
     func_EditChannel,
+    func_GetChannelByID,
     get_channel_by_id_sqlite,
     sqlite_schema,
 } from "./channel.ts";
 import { func_GetChannelByID } from "./channel.ts";
 import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
 import { get_relay_members } from "./resolvers/policy.ts";
-import { get_events_by_filter_sqlite } from "./resolvers/event.ts";
-import { get_event_count_sqlite } from "./resolvers/event.ts";
 import {
+    delete_event_sqlite,
     func_DeleteEvent,
     func_DeleteEventsFromPubkey,
     func_GetDeletedEventIDs,
 } from "./resolvers/event_deletion.ts";
-import { delete_event_sqlite } from "./resolvers/event_deletion.ts";
 
 import { NostrEvent, NostrKind, verify_event_v2, verifyEvent } from "./nostr.ts/nostr.ts";
 import { PublicKey } from "./nostr.ts/key.ts";
 import { parseJSON } from "./nostr.ts/_helper.ts";
+import {
+    accept_invitation_sqlite,
+    count_invite_to_space_each_invite_sqlite,
+    func_AcceptInvitation,
+    func_CountInviteToSpaceEachInvite,
+    func_GetInviteToSpaceByID,
+    func_InviteToSpace,
+    get_invite_to_space_by_id_sqlite,
+    invite_to_space_sqlite,
+} from "./invitation.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -205,6 +218,11 @@ export async function run(args: {
             get_relay_members: get_relay_members(db),
             create_channel: create_channel_sqlite(db),
             edit_channel: edit_channel_sqlite(db),
+            // invitation
+            invite_to_space: invite_to_space_sqlite(db),
+            get_invite_to_space_event: get_invite_to_space_by_id_sqlite(db),
+            accept_invitation: accept_invitation_sqlite(db),
+            count_invite_to_space_each_invite: count_invite_to_space_each_invite_sqlite(db),
             kv: kv,
             _debug: args._debug ? true : false,
         }),
@@ -258,6 +276,11 @@ const root_handler = (
         policyStore: PolicyStore;
         relayInformationStore: RelayInformationStore;
         is_member: func_IsMember;
+        // invitation
+        invite_to_space: func_InviteToSpace;
+        get_invite_to_space_event: func_GetInviteToSpaceByID;
+        accept_invitation: func_AcceptInvitation;
+        count_invite_to_space_each_invite: func_CountInviteToSpaceEachInvite;
         // channel
         create_channel: func_CreateChannel;
         edit_channel: func_EditChannel;
@@ -351,6 +374,12 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
                 }
             } else if (event.kind == Kind_V2.ChannelEdition) {
                 const res = await args.edit_channel(event);
+                if (res instanceof Error) {
+                    return new Response(res.message, { status: 400 });
+                }
+                return new Response();
+            } else if (event.kind == Kind_V2.InviteToSpace) {
+                const res = await args.invite_to_space(event);
                 if (res instanceof Error) {
                     return new Response(res.message, { status: 400 });
                 }

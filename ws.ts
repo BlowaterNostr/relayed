@@ -2,11 +2,6 @@
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
 import { atobSafe, DefaultPolicy } from "./main.tsx";
 import { func_WriteRegularEvent, func_WriteReplaceableEvent } from "./resolvers/event.ts";
-
-import { func_GetEventsByFilter } from "./resolvers/event.ts";
-import { func_DeleteEvent } from "./resolvers/event_deletion.ts";
-import { parseJSON } from "./nostr.ts/_helper.ts";
-import { PublicKey } from "./nostr.ts/key.ts";
 import {
     _RelayResponse_EOSE,
     _RelayResponse_Event,
@@ -15,12 +10,23 @@ import {
     ClientRequest_Event,
     ClientRequest_Message,
     ClientRequest_REQ,
+    Event_V2,
     getTags,
+    Kind_V2,
     NostrEvent,
     NostrFilter,
     NostrKind,
     verifyEvent,
 } from "./nostr.ts/nostr.ts";
+import { func_GetEventsByFilter } from "./resolvers/event.ts";
+import { func_DeleteEvent } from "./resolvers/event_deletion.ts";
+import {
+    func_AcceptInvitation,
+    func_CountInviteToSpaceEachInvite,
+    func_GetInviteToSpaceByID,
+} from "./invitation.ts";
+import { parseJSON } from "./nostr.ts/_helper.ts";
+import { PublicKey } from "./nostr.ts/key.ts";
 
 export type func_IsMember = (pubkey: string) => Promise<boolean | Error>;
 
@@ -32,6 +38,10 @@ export const ws_handler = (
         get_events_by_filter: func_GetEventsByFilter;
         write_regular_event: func_WriteRegularEvent;
         write_replaceable_event: func_WriteReplaceableEvent;
+        // invitation
+        get_invite_to_space_event: func_GetInviteToSpaceByID;
+        accept_invitation: func_AcceptInvitation;
+        count_invite_to_space_each_invite: func_CountInviteToSpaceEachInvite;
         delete_event: func_DeleteEvent;
         is_member: func_IsMember;
         auth_required: boolean;
@@ -64,16 +74,53 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
                 socket.close(3000, rawEvent.message);
                 return;
             }
-            const event = parseJSON<NostrEvent>(rawEvent);
+            const event = parseJSON<NostrEvent | Event_V2>(rawEvent);
             if (event instanceof Error) {
                 console.error(event);
                 socket.close(3000, "invalid auth event format");
                 return;
             }
-
-            const ok = await args.is_member(event.pubkey);
-            if (!ok) {
-                socket.close(3000, `pubkey ${event.pubkey} is not allowed`);
+            if (event.kind == NostrKind.HTTP_AUTH) {
+                const ok = await args.is_member(event.pubkey);
+                if (!ok) {
+                    socket.close(3000, `pubkey ${event.pubkey} is not allowed`);
+                    return;
+                }
+            } else if (event.kind == Kind_V2.AcceptInvitation) {
+                const { invite_event_id } = event;
+                const inviteEvent = await args.get_invite_to_space_event(invite_event_id);
+                if (inviteEvent instanceof Error) {
+                    console.error(inviteEvent);
+                    socket.close(1011, inviteEvent.message);
+                    return;
+                }
+                if (inviteEvent.expired_on) {
+                    // TODO:  check whether expired
+                    if (false) {
+                        console.error("expired");
+                        socket.close(1011, "expired");
+                        return;
+                    }
+                }
+                if (inviteEvent.limit_count) {
+                    const count = await args.count_invite_to_space_each_invite(invite_event_id);
+                    if (count instanceof Error) {
+                        console.error(count);
+                        socket.close(1011, count.message);
+                        return;
+                    }
+                    if (count >= inviteEvent.limit_count) {
+                        console.error("beyond the limit count");
+                        socket.close(1011, "beyond the limit count");
+                        return;
+                    }
+                }
+                const ok = await args.accept_invitation(event);
+                if (ok instanceof Error) {
+                    console.error(ok);
+                    socket.close(1011, ok.message);
+                    return;
+                }
                 return;
             }
         }

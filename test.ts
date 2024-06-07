@@ -1,18 +1,18 @@
 // deno-lint-ignore-file no-empty
 import { Relay, run, software, supported_nips } from "./main.tsx";
 import { assertEquals } from "https://deno.land/std@0.202.0/assert/assert_equals.ts";
-import { assertIsError, assertNotInstanceOf } from "https://deno.land/std@0.202.0/assert/mod.ts";
+import { assertIsError } from "https://deno.land/std@0.202.0/assert/mod.ts";
 import { fail } from "https://deno.land/std@0.202.0/assert/fail.ts";
 
 import * as client_test from "./nostr.ts/relay-single-test.ts";
-import { ChannelCreation, ChannelEdition } from "./events.ts";
-import { Kind_V2 } from "./events.ts";
 import {
+    ChannelCreation,
+    ChannelEdition,
     InMemoryAccountContext,
+    Kind_V2,
     NostrKind,
     RelayResponse_Event,
     sign_event_v2,
-    Signer,
 } from "./nostr.ts/nostr.ts";
 import { prepareNormalNostrEvent } from "./nostr.ts/event.ts";
 import { RelayRejectedEvent, SingleRelayConnection, SubscriptionStream } from "./nostr.ts/relay-single.ts";
@@ -410,6 +410,44 @@ Deno.test({
             await client.close();
         });
         await relay.shutdown();
+    },
+});
+
+Deno.test({
+    name: "Invitation",
+    // ignore: true,
+    fn: async (t) => {
+        await t.step("invite to space", async () => {
+            const relay = await run({
+                default_information: {
+                    pubkey: test_ctx.publicKey.hex,
+                    auth_required: false,
+                },
+                default_policy: {
+                    allowed_kinds: "none",
+                },
+                kv: await test_kv(),
+            });
+            if (relay instanceof Error) {
+                console.error(relay);
+                fail(relay.message);
+            }
+            {
+                const pri = PrivateKey.Generate();
+                const pub = pri.toPublicKey().hex;
+                const event = await sign_event_v2(pri, {
+                    pubkey: pub,
+                    kind: Kind_V2.InviteToSpace,
+                });
+                const r = await fetch(`${relay.http_url}`, {
+                    method: "POST",
+                    body: JSON.stringify(event),
+                });
+                const text = await r.text();
+                assertEquals(r.status, 200);
+            }
+            await relay.shutdown();
+        });
     },
 });
 

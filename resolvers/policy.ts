@@ -1,9 +1,8 @@
 import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
 import { DefaultPolicy } from "../main.tsx";
-import { EventRelayMembers, Kind_V2 } from "../events.ts";
 import { parseJSON } from "../nostr.ts/_helper.ts";
 import { PublicKey } from "../nostr.ts/key.ts";
-import { NostrKind } from "../nostr.ts/nostr.ts";
+import { EventRelayMembers, Kind_V2, NostrKind } from "../nostr.ts/nostr.ts";
 
 export const Policies = (kv: Deno.Kv) =>
     async function () {

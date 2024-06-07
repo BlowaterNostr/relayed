@@ -12,3 +12,4 @@ coverage
 test.sqlite
 *.db
 node_modules
+.idea

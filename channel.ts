@@ -1,4 +1,4 @@
-import { ChannelCreation, ChannelEdition, Kind_V2 } from "./events.ts";
+import { ChannelCreation, ChannelEdition, Kind_V2 } from "./nostr.ts/nostr.ts";
 import { DB, SqliteError } from "https://deno.land/x/sqlite@v3.8/mod.ts";
 
 export type func_GetChannelByName = (
