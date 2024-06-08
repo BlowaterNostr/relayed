@@ -1,5 +1,5 @@
-import { PublicKey } from "../_libs.ts";
 import { software, supported_nips } from "../main.tsx";
+import { PublicKey } from "../nostr.ts/key.ts";
 
 type RelayInfomationBase = {
     name?: string;

@@ -2,8 +2,8 @@ import { func_GetRelayMembers, PolicyStore } from "./policy.ts";
 import { Policies } from "./policy.ts";
 import { RelayInformationStore } from "./nip11.ts";
 import { func_GetEventCount } from "./event.ts";
-import { NostrKind } from "../_libs.ts";
 import { func_DeleteEvent, func_DeleteEventsFromPubkey, func_GetDeletedEventIDs } from "./event_deletion.ts";
+import { NostrKind } from "../nostr.ts/nostr.ts";
 
 export function RootResolver({ deps }: {
     deps: {

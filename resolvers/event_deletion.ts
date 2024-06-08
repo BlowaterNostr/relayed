@@ -1,5 +1,5 @@
 import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
-import { PublicKey } from "../_libs.ts";
+import { PublicKey } from "../nostr.ts/key.ts";
 
 export type func_DeleteEvent = (event_id: string) => Promise<boolean>;
 export type func_DeleteEventsFromPubkey = (pubkey: string | PublicKey) => Promise<string[]>;
