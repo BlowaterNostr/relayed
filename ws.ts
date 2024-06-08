@@ -2,6 +2,11 @@
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
 import { atobSafe, DefaultPolicy } from "./main.tsx";
 import { func_WriteRegularEvent, func_WriteReplaceableEvent } from "./resolvers/event.ts";
+
+import { func_GetEventsByFilter } from "./resolvers/event.ts";
+import { func_DeleteEvent } from "./resolvers/event_deletion.ts";
+import { parseJSON } from "./nostr.ts/_helper.ts";
+import { PublicKey } from "./nostr.ts/key.ts";
 import {
     _RelayResponse_EOSE,
     _RelayResponse_Event,
@@ -14,13 +19,8 @@ import {
     NostrEvent,
     NostrFilter,
     NostrKind,
-    parseJSON,
-    PublicKey,
     verifyEvent,
-} from "./_libs.ts";
-import { func_GetEventsByFilter } from "./resolvers/event.ts";
-import { func_DeleteEvent } from "./resolvers/event_deletion.ts";
-import { sleep } from "https://raw.githubusercontent.com/BlowaterNostr/csp/master/csp.ts";
+} from "./nostr.ts/nostr.ts";
 
 export type func_IsMember = (pubkey: string) => Promise<boolean | Error>;
 

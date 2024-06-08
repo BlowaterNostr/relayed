@@ -5,15 +5,6 @@ import { RootResolver } from "./resolvers/root.ts";
 import * as gql from "https://esm.sh/graphql@16.8.1";
 import { func_GetRelayMembers, Policy } from "./resolvers/policy.ts";
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
-import {
-    NostrEvent,
-    NostrKind,
-    parseJSON,
-    PrivateKey,
-    PublicKey,
-    verify_event_v2,
-    verifyEvent,
-} from "./_libs.ts";
 import { PolicyStore } from "./resolvers/policy.ts";
 import { Policies } from "./resolvers/policy.ts";
 import {
@@ -53,6 +44,10 @@ import {
     func_GetDeletedEventIDs,
 } from "./resolvers/event_deletion.ts";
 import { delete_event_sqlite } from "./resolvers/event_deletion.ts";
+
+import { NostrEvent, NostrKind, verify_event_v2, verifyEvent } from "./nostr.ts/nostr.ts";
+import { PublicKey } from "./nostr.ts/key.ts";
+import { parseJSON } from "./nostr.ts/_helper.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
