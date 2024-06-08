@@ -4,12 +4,12 @@ import { assertEquals } from "https://deno.land/std@0.202.0/assert/assert_equals
 import { assertIsError } from "https://deno.land/std@0.202.0/assert/mod.ts";
 import { fail } from "https://deno.land/std@0.202.0/assert/fail.ts";
 
-import * as client_test from "./nostr.ts//relay-single-test.ts";
+import * as client_test from "./nostr.ts/relay-single-test.ts";
 import { ChannelCreation, ChannelEdition } from "./events.ts";
 import { Kind_V2 } from "./events.ts";
 import { InMemoryAccountContext, NostrKind, RelayResponse_Event, sign_event_v2 } from "./nostr.ts/nostr.ts";
-import { prepareNormalNostrEvent } from "./nostr.ts//event.ts";
-import { RelayRejectedEvent, SingleRelayConnection, SubscriptionStream } from "./nostr.ts//relay-single.ts";
+import { prepareNormalNostrEvent } from "./nostr.ts/event.ts";
+import { RelayRejectedEvent, SingleRelayConnection, SubscriptionStream } from "./nostr.ts/relay-single.ts";
 import { PrivateKey } from "./nostr.ts/key.ts";
 
 const test_kv = async () => {
