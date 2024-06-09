@@ -54,7 +54,7 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
             if (auth == null || auth == "") {
                 // https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4
                 // https://www.iana.org/assignments/websocket/websocket.xml#close-code-number
-                console.error("no auth event found");
+                console.error(url, "no auth event found");
                 socket.close(3000, "no auth event found");
                 return;
             }
