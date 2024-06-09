@@ -15,9 +15,9 @@ test: fmt
 		--trace-leaks --unstable-kv \
 		--allow-read=queries,test.sqlite,relayed.db,relayed.db-journal \
 		--allow-net --allow-write --allow-ffi \
-		--allow-env=DENO_DEPLOYMENT_ID,DENO_DIR,HOME \
+		--allow-env=DENO_DEPLOYMENT_ID,DENO_DIR,HOME,relayed_pubkey \
 		--coverage \
-		test.ts
+		tests/*.ts
 
 cov:
 	deno coverage coverage --html

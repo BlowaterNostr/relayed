@@ -61,7 +61,7 @@ CREATE TABLE IF NOT exists events_v2 (
 `;
 
 export const get_events_by_filter_sqlite =
-    (db: DB): func_GetEventsByFilter => async (filter: NostrFilter) => {
+    (db: DB, log: boolean): func_GetEventsByFilter => async (filter: NostrFilter) => {
         let sql = `SELECT json(event) as event FROM events_v1 WHERE true`;
         const params = [] as any[];
 
@@ -83,7 +83,9 @@ export const get_events_by_filter_sqlite =
         sql += ` ORDER BY created_at DESC LIMIT :limit `;
         params.push(filter.limit || 200);
 
-        console.log(sql, "\n", params, "\n", filter);
+        if (log) {
+            console.log(sql, "\n", params, "\n", filter);
+        }
         let results: [string][];
         try {
             results = db.query<[string]>(sql, params);

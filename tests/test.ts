@@ -1,22 +1,22 @@
 // deno-lint-ignore-file no-empty
-import { Relay, run, software, supported_nips } from "./main.tsx";
+import { ENV_relayed_pubkey, Relay, run, software, supported_nips } from "../main.ts";
 import { assertEquals } from "https://deno.land/std@0.202.0/assert/assert_equals.ts";
 import { assertIsError, assertNotInstanceOf } from "https://deno.land/std@0.202.0/assert/mod.ts";
 import { fail } from "https://deno.land/std@0.202.0/assert/fail.ts";
 
-import * as client_test from "./nostr.ts/relay-single-test.ts";
-import { ChannelCreation, ChannelEdition } from "./events.ts";
-import { Kind_V2 } from "./events.ts";
+import * as client_test from "../nostr.ts/relay-single-test.ts";
+import { ChannelCreation, ChannelEdition } from "../events.ts";
+import { Kind_V2 } from "../events.ts";
 import {
     InMemoryAccountContext,
     NostrKind,
     RelayResponse_Event,
     sign_event_v2,
     Signer,
-} from "./nostr.ts/nostr.ts";
-import { prepareNormalNostrEvent } from "./nostr.ts/event.ts";
-import { RelayRejectedEvent, SingleRelayConnection, SubscriptionStream } from "./nostr.ts/relay-single.ts";
-import { PrivateKey } from "./nostr.ts/key.ts";
+} from "../nostr.ts/nostr.ts";
+import { prepareNormalNostrEvent } from "../nostr.ts/event.ts";
+import { RelayRejectedEvent, SingleRelayConnection, SubscriptionStream } from "../nostr.ts/relay-single.ts";
+import { PrivateKey, PublicKey } from "../nostr.ts/key.ts";
 import { sleep } from "https://raw.githubusercontent.com/BlowaterNostr/csp/master/csp.ts";
 
 const test_kv = async () => {
@@ -84,41 +84,6 @@ Deno.test({
             const event_got_2 = await client.getEvent(event_sent.id);
             assertEquals(event_got_2, event_sent);
         }
-        // {
-        //     await relay.set_policy({
-        //         kind: NostrKind.CONTACTS,
-        //         read: true,
-        //         write: true,
-        //     });
-        //     const event_1 = await randomEvent(ctx, NostrKind.CONTACTS, "1");
-        //     const event_2 = await randomEvent(ctx, NostrKind.CONTACTS, "2");
-        //     const event_3 = await randomEvent(ctx, NostrKind.CONTACTS, "3");
-
-        //     const err_1 = await client.sendEvent(event_1);
-        //     if (err_1 instanceof Error) fail(err_1.message);
-
-        //     const err_2 = await client.sendEvent(event_2);
-        //     if (err_2 instanceof Error) fail(err_2.message);
-
-        //     const err_3 = await client.sendEvent(event_3);
-        //     if (err_3 instanceof Error) fail(err_3.message);
-
-        //     const stream = await client.newSub("get kind 3", {
-        //         kinds: [NostrKind.CONTACTS],
-        //     }) as SubscriptionStream;
-
-        //     const events: NostrEvent[] = [];
-
-        //     for await (const msg of stream.chan) {
-        //         if (msg.type == "EVENT") {
-        //             events.push(msg.event);
-        //         } else if (msg.type == "EOSE") {
-        //             await stream.chan.close();
-        //         }
-        //     }
-
-        //     assertEquals(events.length, 3);
-        // }
         {
             const ctx1 = InMemoryAccountContext.Generate();
             const event_1 = await randomEvent(ctx1, NostrKind.TEXT_NOTE, "test:main 1");
@@ -281,6 +246,50 @@ Deno.test({
     name: "NIP-11: Relay Information Document",
     // ignore: true,
     fn: async (t) => {
+        await t.step("get relay information", async (t) => {
+            await t.step("admin from the argument", async () => {
+                await using relay = await run({
+                    default_policy: {
+                        allowed_kinds: "none",
+                    },
+                    default_information: {
+                        name: "Nostr Relay",
+                    },
+                    auth_required: false,
+                    admin: test_ctx.publicKey,
+                    kv: await test_kv(),
+                }) as Relay;
+                const information = await relay.get_relay_information();
+                assertEquals(information, {
+                    name: "Nostr Relay",
+                    pubkey: test_ctx.publicKey,
+                    software,
+                    supported_nips,
+                });
+            });
+            await t.step("admin from the env var", async () => {
+                const key = PrivateKey.Generate();
+                Deno.env.set(ENV_relayed_pubkey, key.toPublicKey().hex);
+                await using relay = await run({
+                    default_policy: {
+                        allowed_kinds: "none",
+                    },
+                    default_information: {
+                        name: "Nostr Relay",
+                    },
+                    auth_required: false,
+                    kv: await test_kv(),
+                }) as Relay;
+                const information = await relay.get_relay_information();
+                assertEquals(information, {
+                    name: "Nostr Relay",
+                    pubkey: key.toPublicKey(),
+                    software,
+                    supported_nips,
+                });
+            });
+        });
+
         await using relay = await run({
             default_policy: {
                 allowed_kinds: "none",
@@ -293,16 +302,6 @@ Deno.test({
             kv: await test_kv(),
             // system_key: PrivateKey.Generate(),
         }) as Relay;
-
-        await t.step("get relay information", async () => {
-            const information = await relay.get_relay_information();
-            assertEquals(information, {
-                name: "Nostr Relay",
-                pubkey: test_ctx.publicKey,
-                software,
-                supported_nips,
-            });
-        });
 
         await t.step("set relay information", async () => {
             await relay.set_relay_information({
