@@ -49,7 +49,6 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
     socket.onopen = ((socket: WebSocket) => async (e) => {
         console.log("a client connected!", info.remoteAddr);
         if (args.auth_required) {
-            console.log("check auth");
             const url = new URL(req.url);
             const auth = url.searchParams.get("auth");
             if (auth == null || auth == "") {
@@ -71,12 +70,10 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
                 socket.close(3000, "invalid auth event format");
                 return;
             }
+
             const ok = await args.is_member(event.pubkey);
             if (!ok) {
                 socket.close(3000, `pubkey ${event.pubkey} is not allowed`);
-                console.log("not allowed");
-                // @ts-ignore
-                // response.status = 500;
                 return;
             }
         }
@@ -296,6 +293,9 @@ async function handle_cmd_req(
     // query this filter
     for (const filter of filters) {
         const event_candidates = await args.get_events_by_filter(filter);
+        if (event_candidates instanceof Error) {
+            return event_candidates;
+        }
         for (const event of event_candidates) {
             const policy = await args.resolvePolicyByKind(event.kind);
             if (policy instanceof Error) {
