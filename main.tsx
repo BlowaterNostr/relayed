@@ -95,7 +95,7 @@ const ENV_relayed_pubkey = "relayed_pubkey";
 
 export async function run(args: {
     port?: number;
-    admin?: PublicKey;
+    admin?: PublicKey | string;
     auth_required: boolean;
     default_policy: DefaultPolicy;
     default_information?: RelayInfomationBase;
@@ -134,6 +134,14 @@ export async function run(args: {
             return p;
         }
         args.admin = p;
+    } else {
+        if(typeof args.admin == "string") {
+            const p = PublicKey.FromString(args.admin);
+            if (p instanceof Error) {
+                return new Error("invalid admin public key");
+            }
+            args.admin = p;
+        }
     }
     // Relay Key
     // let system_key: string | PrivateKey | Error = args.system_key;

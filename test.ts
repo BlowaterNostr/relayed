@@ -20,14 +20,12 @@ import {
 } from "./nostr.ts/nostr.ts";
 import { prepareNormalNostrEvent } from "./nostr.ts/event.ts";
 import {
-    AuthError,
     RelayRejectedEvent,
     SingleRelayConnection,
     SubscriptionStream,
 } from "./nostr.ts/relay-single.ts";
 import { PrivateKey } from "./nostr.ts/key.ts";
 import { sleep } from "https://raw.githubusercontent.com/BlowaterNostr/csp/master/csp.ts";
-import { NotFoundEventError } from "./invitation.ts";
 
 const test_kv = async () => {
     try {
@@ -416,7 +414,6 @@ Deno.test({
             });
             await sleep(10);
             const err = await client.newSub("", {});
-            console.log("stranger is blocked", err);
             assertIsError(err, Error);
             await client.close();
         });
