@@ -86,6 +86,8 @@ export type Relay = {
     }) => Promise<Policy | Error>;
     // channel
     get_channel_by_id: func_GetChannelByID;
+    // invitation
+    get_invite_to_space_event: func_GetInviteToSpaceByID;
     [Symbol.asyncDispose]: () => Promise<void>;
 };
 
@@ -258,6 +260,10 @@ export async function run(args: {
         // channel
         get_channel_by_id: (id: string) => {
             return get_channel_by_id(id);
+        },
+        // invitation
+        get_invite_to_space_event: (id) => {
+            return get_invite_to_space_by_id_sqlite(db)(id);
         },
         [Symbol.asyncDispose]() {
             return shutdown();

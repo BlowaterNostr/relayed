@@ -27,6 +27,7 @@ import {
 } from "./invitation.ts";
 import { parseJSON } from "./nostr.ts/_helper.ts";
 import { PublicKey } from "./nostr.ts/key.ts";
+import { parse } from "https://deno.land/std@0.224.0/datetime/mod.ts";
 
 export type func_IsMember = (pubkey: string) => Promise<boolean | Error>;
 
@@ -91,14 +92,15 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
                 const inviteEvent = await args.get_invite_to_space_event(invite_event_id);
                 if (inviteEvent instanceof Error) {
                     console.error(inviteEvent);
-                    socket.close(1011, inviteEvent.message);
+                    socket.close(3000, inviteEvent.message);
                     return;
                 }
                 if (inviteEvent.expired_on) {
-                    // TODO:  check whether expired
-                    if (false) {
-                        console.error("expired");
-                        socket.close(1011, "expired");
+                    const expired_on = parse(inviteEvent.expired_on, "yyyy-MM-ddTHH:mm:ss.SSSZ");
+                    console.log(expired_on, new Date());
+                    if (expired_on < new Date()) {
+                        console.error("expired invitation");
+                        socket.close(3000, "expired");
                         return;
                     }
                 }
@@ -106,12 +108,12 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
                     const count = await args.count_invite_to_space_each_invite(invite_event_id);
                     if (count instanceof Error) {
                         console.error(count);
-                        socket.close(1011, count.message);
+                        socket.close(3000, count.message);
                         return;
                     }
                     if (count >= inviteEvent.limit_count) {
                         console.error("beyond the limit count");
-                        socket.close(1011, "beyond the limit count");
+                        socket.close(3000, "beyond the limit count");
                         return;
                     }
                 }

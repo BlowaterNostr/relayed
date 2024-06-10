@@ -3,12 +3,15 @@ import { Relay, run, software, supported_nips } from "./main.tsx";
 import { assertEquals } from "https://deno.land/std@0.202.0/assert/assert_equals.ts";
 import { assertIsError, assertNotInstanceOf } from "https://deno.land/std@0.202.0/assert/mod.ts";
 import { fail } from "https://deno.land/std@0.202.0/assert/fail.ts";
+import { format } from "https://deno.land/std@0.224.0/datetime/format.ts";
 
 import * as client_test from "./nostr.ts/relay-single-test.ts";
 import {
+    AcceptInvitation,
     ChannelCreation,
     ChannelEdition,
     InMemoryAccountContext,
+    InviteToSpace,
     Kind_V2,
     NostrKind,
     RelayResponse_Event,
@@ -16,9 +19,15 @@ import {
     Signer,
 } from "./nostr.ts/nostr.ts";
 import { prepareNormalNostrEvent } from "./nostr.ts/event.ts";
-import { RelayRejectedEvent, SingleRelayConnection, SubscriptionStream } from "./nostr.ts/relay-single.ts";
+import {
+    AuthError,
+    RelayRejectedEvent,
+    SingleRelayConnection,
+    SubscriptionStream,
+} from "./nostr.ts/relay-single.ts";
 import { PrivateKey } from "./nostr.ts/key.ts";
 import { sleep } from "https://raw.githubusercontent.com/BlowaterNostr/csp/master/csp.ts";
+import { NotFoundEventError } from "./invitation.ts";
 
 const test_kv = async () => {
     try {
@@ -407,6 +416,7 @@ Deno.test({
             });
             await sleep(10);
             const err = await client.newSub("", {});
+            console.log("stranger is blocked", err);
             assertIsError(err, Error);
             await client.close();
         });
@@ -418,35 +428,131 @@ Deno.test({
     name: "Invitation",
     // ignore: true,
     fn: async (t) => {
-        await t.step("invite to space", async () => {
-            const relay = await run({
-                admin: test_ctx.publicKey,
-                auth_required: false,
-                default_policy: {
-                    allowed_kinds: "none",
-                },
-                kv: await test_kv(),
+        const relay = await run({
+            admin: test_ctx.publicKey,
+            auth_required: true,
+            default_policy: {
+                allowed_kinds: "none", // EventV2 is not currently restricted by Policy
+            },
+        });
+        if (relay instanceof Error) fail(relay.message);
+        const invitor = InMemoryAccountContext.Generate();
+        const acceptor = InMemoryAccountContext.Generate();
+        const invite: InviteToSpace = await sign_event_v2(invitor.privateKey, {
+            pubkey: invitor.publicKey.hex,
+            kind: Kind_V2.InviteToSpace,
+        });
+
+        await t.step("invite", async () => {
+            const r = await fetch(`${relay.http_url}`, {
+                method: "POST",
+                body: JSON.stringify(invite),
             });
-            if (relay instanceof Error) {
-                console.error(relay);
-                fail(relay.message);
+            await r.text();
+            assertEquals(r.status, 200);
+            const event = await relay.get_invite_to_space_event(invite.id);
+            assertEquals(event, invite);
+        });
+
+        await t.step("accept", async () => {
+            const accept: AcceptInvitation = await sign_event_v2(acceptor.privateKey, {
+                pubkey: acceptor.publicKey.hex,
+                kind: Kind_V2.AcceptInvitation,
+                invite_event_id: invite.id,
+            });
+            const url = `${relay.ws_url}/?auth=${btoa(JSON.stringify(accept))}`;
+            const client = SingleRelayConnection.New(url);
+            await sleep(10);
+            const err = await client.newSub("", {});
+            if (err instanceof Error) fail(err.message);
+            await client.close();
+        });
+
+        await t.step("error when accept non-existent invite", async () => {
+            const accept: AcceptInvitation = await sign_event_v2(acceptor.privateKey, {
+                pubkey: acceptor.publicKey.hex,
+                kind: Kind_V2.AcceptInvitation,
+                invite_event_id: "non-existent",
+            });
+            const url = `${relay.ws_url}/?auth=${btoa(JSON.stringify(accept))}`;
+            const client = SingleRelayConnection.New(url);
+            await sleep(30);
+            const err = await client.newSub("", {});
+            assertIsError(err);
+            await client.close();
+        });
+
+        await t.step("expired", async () => {
+            const expired: InviteToSpace = await sign_event_v2(invitor.privateKey, {
+                pubkey: invitor.publicKey.hex,
+                kind: Kind_V2.InviteToSpace,
+                // rfc3339 format: 2024-06-10T09:15:29.582Z
+                // https://deno.land/std@0.224.0/datetime/mod.ts?s=format
+                expired_on: format(new Date(), "yyyy-MM-ddTHH:mm:ss.SSSZ"),
+            });
+            const r = await fetch(`${relay.http_url}`, {
+                method: "POST",
+                body: JSON.stringify(expired),
+            });
+            await r.text();
+            assertEquals(r.status, 200);
+            {
+                const accept: AcceptInvitation = await sign_event_v2(acceptor.privateKey, {
+                    pubkey: acceptor.publicKey.hex,
+                    kind: Kind_V2.AcceptInvitation,
+                    invite_event_id: expired.id,
+                });
+                const url = `${relay.ws_url}/?auth=${btoa(JSON.stringify(accept))}`;
+                const client = SingleRelayConnection.New(url);
+                await sleep(10);
+                const err = await client.newSub("", {});
+                assertIsError(err);
+                await client.close();
+            }
+        });
+
+        await t.step("count", async () => {
+            const limit: InviteToSpace = await sign_event_v2(invitor.privateKey, {
+                pubkey: invitor.publicKey.hex,
+                kind: Kind_V2.InviteToSpace,
+                limit_count: 1,
+            });
+            const r = await fetch(`${relay.http_url}`, {
+                method: "POST",
+                body: JSON.stringify(limit),
+            });
+            await r.text();
+            assertEquals(r.status, 200);
+            {
+                const acceptor1 = InMemoryAccountContext.Generate();
+                const accept1: AcceptInvitation = await sign_event_v2(acceptor1.privateKey, {
+                    pubkey: acceptor1.publicKey.hex,
+                    kind: Kind_V2.AcceptInvitation,
+                    invite_event_id: limit.id,
+                });
+                const url1 = `${relay.ws_url}/?auth=${btoa(JSON.stringify(accept1))}`;
+                const client1 = SingleRelayConnection.New(url1);
+                await sleep(10);
+                const err1 = await client1.newSub("", {});
+                if (err1 instanceof Error) fail(err1.message);
+                await client1.close();
             }
             {
-                const pri = PrivateKey.Generate();
-                const pub = pri.toPublicKey().hex;
-                const event = await sign_event_v2(pri, {
-                    pubkey: pub,
-                    kind: Kind_V2.InviteToSpace,
+                const acceptor2 = InMemoryAccountContext.Generate();
+                const accept2: AcceptInvitation = await sign_event_v2(acceptor2.privateKey, {
+                    pubkey: acceptor2.publicKey.hex,
+                    kind: Kind_V2.AcceptInvitation,
+                    invite_event_id: limit.id,
                 });
-                const r = await fetch(`${relay.http_url}`, {
-                    method: "POST",
-                    body: JSON.stringify(event),
-                });
-                const text = await r.text();
-                assertEquals(r.status, 200);
+                const url2 = `${relay.ws_url}/?auth=${btoa(JSON.stringify(accept2))}`;
+                const client2 = SingleRelayConnection.New(url2);
+                await sleep(30);
+                const err2 = await client2.newSub("", {});
+                assertIsError(err2);
+                await client2.close();
             }
-            await relay.shutdown();
         });
+        await relay.shutdown();
     },
 });
 

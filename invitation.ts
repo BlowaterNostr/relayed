@@ -29,8 +29,8 @@ export const invite_to_space_sqlite = (db: DB): func_InviteToSpace => async (eve
 export const get_invite_to_space_by_id_sqlite = (db: DB): func_GetInviteToSpaceByID => async (id: string) => {
     try {
         const rows = db.query<[string]>(
-            `SELECT event FROM events_v2 WHERE id = ? AND kind = "InviteToSpace"`,
-            [id],
+            `SELECT event FROM events_v2 WHERE id = :id AND kind = 'InviteToSpace'`,
+            { id },
         );
         if (rows.length == 0) {
             return new NotFoundEventError(`InviteToSpace event ${id} does not exist`);
@@ -57,11 +57,13 @@ export const accept_invitation_sqlite =
 export const count_invite_to_space_each_invite_sqlite =
     (db: DB): func_CountInviteToSpaceEachInvite => async (invite_event_id: string) => {
         try {
-            const rows = db.query<[number]>(
-                `SELECT count(*) FROM events_v2 WHERE kind = "AcceptInvitation" AND event.invite_event_id = ?`,
-                [invite_event_id],
+            const rows = db.query<[string]>(
+                `SELECT event FROM events_v2 WHERE kind = 'AcceptInvitation'`,
             );
-            return rows[0][0];
+            const filtered: AcceptInvitation[] = rows.map((e) => JSON.parse(e[0])).filter((e) =>
+                e.invite_event_id == invite_event_id
+            );
+            return filtered.length;
         } catch (e) {
             return e as SqliteError;
         }
