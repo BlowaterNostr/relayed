@@ -21,9 +21,7 @@ import {
 import Landing from "./routes/landing.tsx";
 import Error404 from "./routes/_404.tsx";
 import { RelayInfomationBase, RelayInformation, RelayInformationStore } from "./resolvers/nip11.ts";
-import { func_GetEventsByFilter, func_WriteRegularEvent } from "./resolvers/event.ts";
 import { Cookie, getCookies, setCookie } from "https://deno.land/std@0.224.0/http/cookie.ts";
-import { Event_V2, Kind_V2 } from "./events.ts";
 import {
     create_channel_sqlite,
     edit_channel_sqlite,
@@ -33,7 +31,6 @@ import {
     get_channel_by_id_sqlite,
     sqlite_schema,
 } from "./channel.ts";
-import { func_GetChannelByID } from "./channel.ts";
 import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
 import { get_relay_members } from "./resolvers/policy.ts";
 import {
@@ -43,7 +40,7 @@ import {
     func_GetDeletedEventIDs,
 } from "./resolvers/event_deletion.ts";
 
-import { NostrEvent, NostrKind, verify_event_v2, verifyEvent } from "./nostr.ts/nostr.ts";
+import { Event_V2, Kind_V2, NostrEvent, NostrKind, verify_event_v2, verifyEvent } from "./nostr.ts/nostr.ts";
 import { PublicKey } from "./nostr.ts/key.ts";
 import { parseJSON } from "./nostr.ts/_helper.ts";
 import {
