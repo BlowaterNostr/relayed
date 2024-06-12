@@ -107,7 +107,7 @@ export async function run(args: {
     const write_replaceable_event = write_replaceable_event_sqlite(db);
     const write_regular_event = write_regular_event_sqlite(db);
     const get_event_count = get_event_count_sqlite(db);
-    const get_events_by_filter = get_events_by_filter_sqlite(db);
+    const get_events_by_filter = get_events_by_filter_sqlite(db, args._debug || false);
 
     // Administrator Keys
     if (args.admin == undefined) {
@@ -169,23 +169,7 @@ export async function run(args: {
         },
         root_handler({
             ...args,
-            is_member: ((admin: PublicKey) => async (pubkey: string) => {
-                const key = PublicKey.FromString(pubkey);
-                if (key instanceof Error) {
-                    return key;
-                }
-                // admin is always a member
-                if (key.hex == admin.hex) {
-                    return true;
-                }
-                const policy = await policyStore.resolvePolicyByKind(NostrKind.TEXT_NOTE);
-                if (policy instanceof Error) {
-                    return policy;
-                }
-                const policyAllow = policy.allow.has(pubkey);
-                const policyBlock = policy.block.has(pubkey);
-                return policyAllow && !policyBlock;
-            })(args.admin),
+            is_member: is_member({admin: args.admin, policyStore}),
             // deletion
             delete_event: delete_event_sqlite(db),
             delete_events_from_pubkey: async () => {
@@ -483,7 +467,26 @@ async function verifyToken(event: NostrEvent, relayInformationStore: RelayInform
     }
 }
 
-// export const kv = await Deno.openKv("./test-kv");
+const is_member = (args: {
+    admin: PublicKey,
+    policyStore: PolicyStore,
+}): func_IsMember => async (pubkey: string) => {
+    const {admin, policyStore} = args;
+    const key = PublicKey.FromString(pubkey);
+    if (key instanceof Error) {
+        return key;
+    }
+    if (key.hex == admin.hex) {
+        return true;
+    }
+    const policy = await policyStore.resolvePolicyByKind(NostrKind.TEXT_NOTE)
+    if(policy instanceof Error) {
+        return policy
+    }
+    const policyAllow = policy.allow.has(pubkey);
+    const policyBlock = policy.block.has(pubkey);
+    return policyAllow && !policyBlock;
+}
 
 const graphiql = `
 <!--
@@ -599,7 +602,7 @@ const graphiql = `
   </body>
 </html>`;
 
-export function atobSafe(data) {
+export function atobSafe(data: string) {
     try {
         return atob(data);
     } catch (e) {

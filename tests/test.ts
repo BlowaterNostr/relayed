@@ -1,5 +1,5 @@
 // deno-lint-ignore-file no-empty
-import { ENV_relayed_pubkey, Relay, run, software, supported_nips } from "../main.tsx";
+import { ENV_relayed_pubkey, Relay, run, software, supported_nips } from "../main.ts";
 import { assertEquals } from "https://deno.land/std@0.202.0/assert/assert_equals.ts";
 import { assertIsError, assertNotInstanceOf } from "https://deno.land/std@0.202.0/assert/mod.ts";
 import { fail } from "https://deno.land/std@0.202.0/assert/fail.ts";

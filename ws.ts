@@ -1,6 +1,6 @@
 // deno-lint-ignore-file
 import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
-import { atobSafe, DefaultPolicy } from "./main.tsx";
+import { atobSafe, DefaultPolicy } from "./main.ts";
 import { func_WriteRegularEvent, func_WriteReplaceableEvent } from "./resolvers/event.ts";
 
 import { func_GetEventsByFilter } from "./resolvers/event.ts";
