@@ -79,7 +79,7 @@ export type Relay = {
     [Symbol.asyncDispose]: () => Promise<void>;
 };
 
-const ENV_relayed_pubkey = "relayed_pubkey";
+export const ENV_relayed_pubkey = "relayed_pubkey";
 
 export async function run(args: {
     port?: number;
