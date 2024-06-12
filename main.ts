@@ -3,46 +3,57 @@ import { func_IsMember, SubscriptionMap, ws_handler } from "./ws.ts";
 import { render } from "https://esm.sh/preact-render-to-string@6.4.1";
 import { RootResolver } from "./resolvers/root.ts";
 import * as gql from "https://esm.sh/graphql@16.8.1";
-import { func_GetRelayMembers, Policy } from "./resolvers/policy.ts";
-import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
-import { PolicyStore } from "./resolvers/policy.ts";
-import { Policies } from "./resolvers/policy.ts";
+import {
+    func_GetRelayMembers,
+    func_ResolvePolicyByKind,
+    get_relay_members,
+    Policies,
+    Policy,
+    PolicyStore,
+} from "./resolvers/policy.ts";
 import {
     event_schema_sqlite,
     func_GetEventCount,
+    func_GetEventsByFilter,
+    func_WriteRegularEvent,
     func_WriteReplaceableEvent,
+    get_event_count_sqlite,
+    get_events_by_filter_sqlite,
     write_regular_event_sqlite,
     write_replaceable_event_sqlite,
 } from "./resolvers/event.ts";
 import Landing from "./routes/landing.tsx";
 import Error404 from "./routes/_404.tsx";
 import { RelayInfomationBase, RelayInformation, RelayInformationStore } from "./resolvers/nip11.ts";
-import { func_GetEventsByFilter, func_WriteRegularEvent } from "./resolvers/event.ts";
 import { Cookie, getCookies, setCookie } from "https://deno.land/std@0.224.0/http/cookie.ts";
-import { Event_V2, Kind_V2 } from "./events.ts";
+import {
+    Event_V2,
+    InviteToSpace,
+    Kind_V2,
+    NostrEvent,
+    NostrKind,
+    verify_event_v2,
+    verifyEvent,
+} from "./nostr.ts/nostr.ts";
 import {
     create_channel_sqlite,
     edit_channel_sqlite,
     func_CreateChannel,
     func_EditChannel,
+    func_GetChannelByID,
     get_channel_by_id_sqlite,
     sqlite_schema,
 } from "./channel.ts";
-import { func_GetChannelByID } from "./channel.ts";
 import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
-import { get_relay_members } from "./resolvers/policy.ts";
-import { get_events_by_filter_sqlite } from "./resolvers/event.ts";
-import { get_event_count_sqlite } from "./resolvers/event.ts";
 import {
+    delete_event_sqlite,
     func_DeleteEvent,
     func_DeleteEventsFromPubkey,
     func_GetDeletedEventIDs,
 } from "./resolvers/event_deletion.ts";
-import { delete_event_sqlite } from "./resolvers/event_deletion.ts";
-
-import { NostrEvent, NostrKind, verify_event_v2, verifyEvent } from "./nostr.ts/nostr.ts";
-import { PublicKey } from "./nostr.ts/key.ts";
+import { InvalidKey, PublicKey } from "./nostr.ts/key.ts";
 import { parseJSON } from "./nostr.ts/_helper.ts";
+import { func_InviteToSpace, invite_to_space_sqlite } from "./invitation.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -83,7 +94,7 @@ export const ENV_relayed_pubkey = "relayed_pubkey";
 
 export async function run(args: {
     port?: number;
-    admin?: PublicKey;
+    admin?: PublicKey | string;
     auth_required: boolean;
     default_policy: DefaultPolicy;
     default_information?: RelayInfomationBase;
@@ -122,6 +133,14 @@ export async function run(args: {
             return p;
         }
         args.admin = p;
+    } else {
+        if (typeof args.admin == "string") {
+            const p = PublicKey.FromString(args.admin);
+            if (p instanceof Error) {
+                return new Error("invalid admin public key");
+            }
+            args.admin = p;
+        }
     }
     // Relay Key
     // let system_key: string | PrivateKey | Error = args.system_key;
@@ -190,6 +209,24 @@ export async function run(args: {
             create_channel: create_channel_sqlite(db),
             edit_channel: edit_channel_sqlite(db),
             kv: kv,
+            // invitation
+            invite_to_space: async (event: InviteToSpace) => {
+                const policy = await policyStore.resolvePolicyByKind(NostrKind.TEXT_NOTE);
+                if (policy instanceof Error) {
+                    return policy;
+                }
+                const appended = await policyStore.set_policy({
+                    ...policy,
+                    allow: policy.allow.add(event.invitee),
+                });
+                if (appended instanceof Error) {
+                    return appended;
+                }
+                const done = invite_to_space_sqlite(db)(event);
+                if (done instanceof Error) {
+                    return done;
+                }
+            },
             _debug: args._debug ? true : false,
         }),
     );
@@ -259,6 +296,8 @@ const root_handler = (
         get_relay_members: func_GetRelayMembers;
         // config
         auth_required: boolean;
+        // invitation
+        invite_to_space: func_InviteToSpace;
         kv: Deno.Kv;
         _debug: boolean;
     },
@@ -324,6 +363,7 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
             }
             const ok = await verify_event_v2(event);
             if (!ok) {
+                console.error("event", event);
                 return new Response("event is not valid", { status: 400 });
             }
             if (event.kind == Kind_V2.ChannelCreation) {
@@ -336,6 +376,13 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
             } else if (event.kind == Kind_V2.ChannelEdition) {
                 const res = await args.edit_channel(event);
                 if (res instanceof Error) {
+                    return new Response(res.message, { status: 400 });
+                }
+                return new Response();
+            } else if (event.kind == Kind_V2.InviteToSpace) {
+                const res = await args.invite_to_space(event);
+                if (res instanceof Error) {
+                    console.error(res);
                     return new Response(res.message, { status: 400 });
                 }
                 return new Response();
