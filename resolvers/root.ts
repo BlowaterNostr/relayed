@@ -1,4 +1,4 @@
-import { func_GetRelayMembers, PolicyStore } from "./policy.ts";
+import { func_GetSpaceMembers, PolicyStore } from "./policy.ts";
 import { Policies } from "./policy.ts";
 import { RelayInformationStore } from "./nip11.ts";
 import { func_GetEventCount } from "./event.ts";
@@ -10,10 +10,10 @@ export function RootResolver({ deps }: {
         policyStore: PolicyStore;
         relayInformationStore: RelayInformationStore;
         get_event_count: func_GetEventCount;
+        get_space_members: func_GetSpaceMembers;
         delete_event: func_DeleteEvent;
         delete_events_from_pubkey: func_DeleteEventsFromPubkey;
         get_deleted_event_ids: func_GetDeletedEventIDs;
-        get_relay_members: func_GetRelayMembers;
         kv: Deno.Kv;
     };
 }) {
@@ -28,7 +28,7 @@ function Queries(deps: {
     relayInformationStore: RelayInformationStore;
     get_event_count: func_GetEventCount;
     get_deleted_event_ids: func_GetDeletedEventIDs;
-    get_relay_members: func_GetRelayMembers;
+    get_space_members: func_GetSpaceMembers;
     kv: Deno.Kv;
 }) {
     return {
@@ -60,15 +60,12 @@ function Queries(deps: {
             return deps.get_deleted_event_ids();
         },
         members: async () => {
-            const members = await deps.get_relay_members();
+            const members = await deps.get_space_members();
             if (members instanceof Error) {
                 console.error(members);
                 throw members;
             }
-            if (members == undefined) {
-                return [];
-            }
-            return members.members;
+            return members;
         },
     };
 }

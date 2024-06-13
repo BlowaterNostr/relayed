@@ -4,9 +4,13 @@ import { render } from "https://esm.sh/preact-render-to-string@6.4.1";
 import { RootResolver } from "./resolvers/root.ts";
 import * as gql from "https://esm.sh/graphql@16.8.1";
 import {
-    func_GetRelayMembers,
+    add_space_member,
+    func_AddSpaceMember,
+    func_GetSpaceMembers,
+    func_IsSpaceMember,
     func_ResolvePolicyByKind,
-    get_relay_members,
+    get_space_members,
+    is_space_member,
     Policies,
     Policy,
     PolicyStore,
@@ -66,7 +70,6 @@ export type Relay = {
     ws_url: string;
     http_url: string;
     shutdown: () => Promise<void>;
-
     get_event: (id: string) => Promise<NostrEvent | null>;
     set_relay_information: (args: {
         name?: string;
@@ -87,6 +90,9 @@ export type Relay = {
     }) => Promise<Policy | Error>;
     // channel
     get_channel_by_id: func_GetChannelByID;
+    // space member
+    get_space_members: func_GetSpaceMembers;
+    is_space_member: func_IsSpaceMember;
     [Symbol.asyncDispose]: () => Promise<void>;
 };
 
@@ -205,7 +211,10 @@ export async function run(args: {
             write_replaceable_event,
             policyStore,
             relayInformationStore,
-            get_relay_members: get_relay_members(db),
+            // space member
+            get_space_members: get_space_members(db),
+            add_space_member: add_space_member(db),
+            // channel
             create_channel: create_channel_sqlite(db),
             edit_channel: edit_channel_sqlite(db),
             kv: kv,
@@ -265,6 +274,9 @@ export async function run(args: {
         get_channel_by_id: (id: string) => {
             return get_channel_by_id(id);
         },
+        // space member
+        get_space_members: get_space_members(db),
+        is_space_member: is_space_member({ admin: args.admin, db }),
         [Symbol.asyncDispose]() {
             return shutdown();
         },
@@ -292,8 +304,9 @@ const root_handler = (
         // write
         write_regular_event: func_WriteRegularEvent;
         write_replaceable_event: func_WriteReplaceableEvent;
-        // relay
-        get_relay_members: func_GetRelayMembers;
+        // space member
+        get_space_members: func_GetSpaceMembers;
+        add_space_member: func_AddSpaceMember;
         // config
         auth_required: boolean;
         // invitation
@@ -386,6 +399,13 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
                     return new Response(res.message, { status: 400 });
                 }
                 return new Response();
+            } else if (event.kind == Kind_V2.SpaceMember) {
+                const res = await args.add_space_member(event);
+                if (res instanceof Error) {
+                    console.error(res);
+                    return new Response(res.message, { status: 400 });
+                }
+                return new Response();
             } else {
                 return new Response(`not a recognizable event`, { status: 400 });
             }
@@ -405,6 +425,7 @@ const graphql_handler = (
         // get
         get_events_by_filter: func_GetEventsByFilter;
         get_event_count: func_GetEventCount;
+        get_space_members: func_GetSpaceMembers;
         // write
         write_regular_event: func_WriteRegularEvent;
         write_replaceable_event: func_WriteReplaceableEvent;
@@ -412,8 +433,6 @@ const graphql_handler = (
         delete_event: func_DeleteEvent;
         delete_events_from_pubkey: func_DeleteEventsFromPubkey;
         get_deleted_event_ids: func_GetDeletedEventIDs;
-        // relay members
-        get_relay_members: func_GetRelayMembers;
         // kv
         kv: Deno.Kv;
     },

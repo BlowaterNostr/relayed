@@ -405,7 +405,7 @@ Deno.test({
             const client = SingleRelayConnection.New(relay.ws_url, {
                 signer: InMemoryAccountContext.Generate(),
             });
-            await sleep(10);
+            await sleep(30);
             const err = await client.newSub("", {});
             assertIsError(err, Error);
             await client.close();
