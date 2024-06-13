@@ -148,8 +148,14 @@ export const is_space_member =
     (args: { admin: PublicKey; db?: DB }): func_IsSpaceMember => async (pubkey: string) => {
         if (args.admin.hex === pubkey) return true;
 
-        const space_members = await get_space_members(args.db)();
-        if (space_members instanceof Error) return new Error(space_members.message);
-        const members_pubkey = space_members.map((event) => event.member);
-        return members_pubkey.includes(pubkey);
+        if (!args.db) {
+            return new Error("is_space_member is not supported");
+        }
+        const rows = args.db.query<[string]>(
+            "select event from events_v2 where kind = (?) and json_extract(event, '$.member') = (?)",
+            [Kind_V2.SpaceMember, pubkey],
+        );
+        console.log("rows", rows);
+        if (rows.length > 0) return true;
+        return false;
     };

@@ -50,5 +50,11 @@ Deno.test("Space Member", async (t) => {
         assertEquals(res, true);
     });
 
+    await t.step("stranger is not member", async () => {
+        const res = await relay.is_space_member(InMemoryAccountContext.Generate().publicKey.hex);
+        if (res instanceof Error) fail(res.message);
+        assertEquals(res, false);
+    });
+
     await relay.shutdown();
 });
