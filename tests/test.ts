@@ -19,7 +19,6 @@ import { prepareNormalNostrEvent } from "../nostr.ts/event.ts";
 import { RelayRejectedEvent, SingleRelayConnection, SubscriptionStream } from "../nostr.ts/relay-single.ts";
 import { PrivateKey, PublicKey } from "../nostr.ts/key.ts";
 import { sleep } from "https://raw.githubusercontent.com/BlowaterNostr/csp/master/csp.ts";
-import { prepareInvitation } from "../nostr.ts/invitation.ts";
 
 const test_kv = async () => {
     try {
@@ -410,40 +409,6 @@ Deno.test({
             assertIsError(err, Error);
             await client.close();
         });
-        await relay.shutdown();
-    },
-});
-
-Deno.test({
-    name: "Invitationn",
-    // ignore: ture,
-    fn: async () => {
-        const admin = InMemoryAccountContext.Generate() as Signer;
-        const invitee = InMemoryAccountContext.Generate();
-        const relay = await run({
-            admin: admin.publicKey.hex,
-            kv: await test_kv(),
-            default_policy: {
-                allowed_kinds: "all",
-            },
-            auth_required: true,
-        });
-        if (relay instanceof Error) fail(relay.message);
-        {
-            const event = await prepareInvitation(admin, invitee.publicKey.hex);
-            if (event instanceof Error) fail(event.message);
-            const r = await fetch(`${relay.http_url}`, {
-                method: "POST",
-                body: JSON.stringify(event),
-            });
-            await r.text();
-            assertEquals(r.status, 200);
-            const policy = await relay.get_policy(NostrKind.TEXT_NOTE);
-            if (policy instanceof Error) fail(policy.message);
-            console.log(policy.allow);
-            assertEquals(policy.allow.has(invitee.publicKey.hex), true);
-        }
-
         await relay.shutdown();
     },
 });

@@ -30,15 +30,7 @@ import Landing from "./routes/landing.tsx";
 import Error404 from "./routes/_404.tsx";
 import { RelayInfomationBase, RelayInformation, RelayInformationStore } from "./resolvers/nip11.ts";
 import { Cookie, getCookies, setCookie } from "https://deno.land/std@0.224.0/http/cookie.ts";
-import {
-    Event_V2,
-    InviteToSpace,
-    Kind_V2,
-    NostrEvent,
-    NostrKind,
-    verify_event_v2,
-    verifyEvent,
-} from "./nostr.ts/nostr.ts";
+import { Event_V2, Kind_V2, NostrEvent, NostrKind, verify_event_v2, verifyEvent } from "./nostr.ts/nostr.ts";
 import {
     create_channel_sqlite,
     edit_channel_sqlite,
@@ -57,7 +49,6 @@ import {
 } from "./resolvers/event_deletion.ts";
 import { InvalidKey, PublicKey } from "./nostr.ts/key.ts";
 import { parseJSON } from "./nostr.ts/_helper.ts";
-import { func_InviteToSpace, invite_to_space_sqlite } from "./invitation.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -218,24 +209,6 @@ export async function run(args: {
             create_channel: create_channel_sqlite(db),
             edit_channel: edit_channel_sqlite(db),
             kv: kv,
-            // invitation
-            invite_to_space: async (event: InviteToSpace) => {
-                const policy = await policyStore.resolvePolicyByKind(NostrKind.TEXT_NOTE);
-                if (policy instanceof Error) {
-                    return policy;
-                }
-                const appended = await policyStore.set_policy({
-                    ...policy,
-                    allow: policy.allow.add(event.invitee),
-                });
-                if (appended instanceof Error) {
-                    return appended;
-                }
-                const done = invite_to_space_sqlite(db)(event);
-                if (done instanceof Error) {
-                    return done;
-                }
-            },
             _debug: args._debug ? true : false,
         }),
     );
@@ -309,8 +282,6 @@ const root_handler = (
         add_space_member: func_AddSpaceMember;
         // config
         auth_required: boolean;
-        // invitation
-        invite_to_space: func_InviteToSpace;
         kv: Deno.Kv;
         _debug: boolean;
     },
@@ -389,13 +360,6 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
             } else if (event.kind == Kind_V2.ChannelEdition) {
                 const res = await args.edit_channel(event);
                 if (res instanceof Error) {
-                    return new Response(res.message, { status: 400 });
-                }
-                return new Response();
-            } else if (event.kind == Kind_V2.InviteToSpace) {
-                const res = await args.invite_to_space(event);
-                if (res instanceof Error) {
-                    console.error(res);
                     return new Response(res.message, { status: 400 });
                 }
                 return new Response();
