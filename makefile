@@ -22,3 +22,6 @@ test: fmt
 cov:
 	deno coverage coverage --html
 	file_server -p 4508 coverage/html
+
+bundle:
+	deno bundle main.ts mod.ts
