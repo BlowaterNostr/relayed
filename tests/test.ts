@@ -19,6 +19,7 @@ import { prepareNormalNostrEvent } from "../nostr.ts/event.ts";
 import { RelayRejectedEvent, SingleRelayConnection, SubscriptionStream } from "../nostr.ts/relay-single.ts";
 import { PrivateKey, PublicKey } from "../nostr.ts/key.ts";
 import { sleep } from "https://raw.githubusercontent.com/BlowaterNostr/csp/master/csp.ts";
+import { nowRFC3339 } from "../nostr.ts/_helper.ts";
 
 const test_kv = async () => {
     try {
@@ -222,6 +223,7 @@ Deno.test({
                 channel_id: ChannelCreation_event.id,
                 name: "test2",
                 scope: "server",
+                created_at: nowRFC3339(),
             });
             const r2 = await fetch(`${relay.http_url}`, {
                 method: "POST",

@@ -138,6 +138,9 @@ export const add_space_member = (db?: DB): func_AddSpaceMember => async (event: 
     if (!db) {
         return new Error("add_space_member is not supported");
     }
+    if (await is_space_member({ db })(event.member)) {
+        return new Error(`${event.member} is already a member of the space.`);
+    }
     db.query(
         `INSERT INTO events_v2(id, pubkey, kind, event) VALUES (?, ?, ?, ?)`,
         [event.id, event.pubkey, event.kind, JSON.stringify(event)],
@@ -145,8 +148,8 @@ export const add_space_member = (db?: DB): func_AddSpaceMember => async (event: 
 };
 
 export const is_space_member =
-    (args: { admin: PublicKey; db?: DB }): func_IsSpaceMember => async (pubkey: string) => {
-        if (args.admin.hex === pubkey) return true;
+    (args: { admin?: PublicKey; db?: DB }): func_IsSpaceMember => async (pubkey: string) => {
+        if (args.admin?.hex === pubkey) return true;
 
         if (!args.db) {
             return new Error("is_space_member is not supported");

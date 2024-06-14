@@ -3,7 +3,6 @@ import { InMemoryAccountContext } from "../nostr.ts/nostr.ts";
 import { fail } from "https://deno.land/std@0.202.0/assert/fail.ts";
 import { assertEquals } from "https://deno.land/std@0.220.1/assert/assert_equals.ts";
 import { prepareAddMember } from "../nostr.ts/space-member.ts";
-import { sleep } from "https://raw.githubusercontent.com/BlowaterNostr/csp/master/csp.ts";
 
 const test_ctx = InMemoryAccountContext.Generate();
 const test_kv = async () => {
@@ -36,6 +35,18 @@ Deno.test("Space Member", async (t) => {
         const space_members = await relay.get_space_members();
         if (space_members instanceof Error) fail(space_members.message);
         assertEquals(space_members.map((event) => event.id).includes(add_member_event.id), true);
+    });
+
+    await t.step("it it already a member", async () => {
+        const redo = await prepareAddMember(test_ctx, new_member.publicKey.hex);
+        if (redo instanceof Error) fail(redo.message);
+        const r = await fetch(`${relay.http_url}`, {
+            method: "POST",
+            body: JSON.stringify(redo),
+        });
+        const message = await r.text();
+        assertEquals(r.status, 400);
+        assertEquals(message, `${new_member.publicKey.hex} is already a member of the space.`);
     });
 
     await t.step("admin is member", async () => {
