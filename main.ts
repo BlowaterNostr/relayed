@@ -315,6 +315,24 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
             return resp;
         }
     }
+    if (url.pathname == "/api/members") {
+        const members = await args.get_space_members();
+        if (members instanceof Error) {
+            console.log(members);
+            return new Response("", { status: 500 });
+        }
+        const body = {
+            data: members.map((event) => event.member),
+        };
+        const resp = new Response(JSON.stringify(body), {
+            status: 200,
+        });
+        resp.headers.set("content-type", "application/json; charset=utf-8");
+        resp.headers.set("Access-Control-Allow-Origin", "*");
+        resp.headers.set("Access-Control-Allow-Methods", "GET");
+        resp.headers.set("Access-Control-Allow-Headers", "accept,content-type");
+        return resp;
+    }
     if (url.pathname == "/api") {
         return graphql_handler(args)(req);
     }
