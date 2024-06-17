@@ -1,5 +1,5 @@
 import { typeDefs } from "./graphql-schema.ts";
-import { func_IsMember, SubscriptionMap, ws_handler } from "./ws.ts";
+import { SubscriptionMap, ws_handler } from "./ws.ts";
 import { render } from "https://esm.sh/preact-render-to-string@6.4.1";
 import { RootResolver } from "./resolvers/root.ts";
 import * as gql from "https://esm.sh/graphql@16.8.1";
@@ -185,7 +185,6 @@ export async function run(args: {
         },
         root_handler({
             ...args,
-            is_member: is_member({ admin: args.admin, policyStore }),
             // deletion
             delete_event: delete_event_sqlite(db),
             delete_events_from_pubkey: async () => {
@@ -205,6 +204,10 @@ export async function run(args: {
             // space member
             get_space_members: get_space_members(db),
             add_space_member: add_space_member(db),
+            is_space_member: is_space_member({
+                admin: args.admin,
+                db
+            }),
             // channel
             create_channel: create_channel_sqlite(db),
             edit_channel: edit_channel_sqlite(db),
@@ -263,7 +266,6 @@ const root_handler = (
         resolvePolicyByKind: func_ResolvePolicyByKind;
         policyStore: PolicyStore;
         relayInformationStore: RelayInformationStore;
-        is_member: func_IsMember;
         // channel
         create_channel: func_CreateChannel;
         edit_channel: func_EditChannel;
@@ -280,6 +282,7 @@ const root_handler = (
         // space member
         get_space_members: func_GetSpaceMembers;
         add_space_member: func_AddSpaceMember;
+        is_space_member: func_IsSpaceMember;
         // config
         auth_required: boolean;
         kv: Deno.Kv;
@@ -514,28 +517,6 @@ async function verifyToken(event: NostrEvent, relayInformationStore: RelayInform
         return new Error("your pubkey is not an admin");
     }
 }
-
-const is_member = (args: {
-    admin: PublicKey;
-    policyStore: PolicyStore;
-}): func_IsMember =>
-async (pubkey: string) => {
-    const { admin, policyStore } = args;
-    const key = PublicKey.FromString(pubkey);
-    if (key instanceof Error) {
-        return key;
-    }
-    if (key.hex == admin.hex) {
-        return true;
-    }
-    const policy = await policyStore.resolvePolicyByKind(NostrKind.TEXT_NOTE);
-    if (policy instanceof Error) {
-        return policy;
-    }
-    const policyAllow = policy.allow.has(pubkey);
-    const policyBlock = policy.block.has(pubkey);
-    return policyAllow && !policyBlock;
-};
 
 const graphiql = `
 <!--
