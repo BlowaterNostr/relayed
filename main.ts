@@ -84,6 +84,7 @@ export type Relay = {
     // space member
     get_space_members: func_GetSpaceMembers;
     is_space_member: func_IsSpaceMember;
+    add_space_member: func_AddSpaceMember;
     [Symbol.asyncDispose]: () => Promise<void>;
 };
 
@@ -253,6 +254,7 @@ export async function run(args: {
         // space member
         get_space_members: get_space_members(db),
         is_space_member: is_space_member({ admin: args.admin, db }),
+        add_space_member: add_space_member(db),
         [Symbol.asyncDispose]() {
             return shutdown();
         },

@@ -23,6 +23,7 @@ import { PrivateKey } from "../nostr.ts/key.ts";
 import { sleep } from "https://raw.githubusercontent.com/BlowaterNostr/csp/master/csp.ts";
 import { RFC3339 } from "../nostr.ts/_helper.ts";
 import { format } from "https://deno.land/std@0.224.0/datetime/format.ts";
+import { prepareSpaceMember } from "../nostr.ts/space-member.ts";
 
 const test_kv = async () => {
     try {
@@ -368,9 +369,9 @@ Deno.test({
     name: "Authorization",
     // ignore: true,
     fn: async (t) => {
-        const pri = PrivateKey.Generate();
+        const ctx = InMemoryAccountContext.Generate();
         const relay = await run({
-            admin: pri.toPublicKey(),
+            admin: ctx.publicKey.hex,
             kv: await test_kv(),
             default_policy: {
                 allowed_kinds: "all",
@@ -378,11 +379,10 @@ Deno.test({
             auth_required: true,
         });
         if (relay instanceof Error) fail(relay.message);
-        const admin = InMemoryAccountContext.FromString(pri.hex) as Signer;
 
         await t.step("admin is always allowed", async () => {
             const client = SingleRelayConnection.New(relay.ws_url, {
-                signer: admin,
+                signer: ctx,
             });
             const err = await client.newSub("", {});
             assertNotInstanceOf(err, Error);
@@ -391,10 +391,9 @@ Deno.test({
 
         await t.step("a member is allowed", async () => {
             const user = InMemoryAccountContext.Generate();
-            await relay.set_policy({
-                kind: NostrKind.TEXT_NOTE,
-                allow: new Set([user.publicKey.hex]),
-            });
+            const spaceMemberEvennt = await prepareSpaceMember(ctx, user.publicKey.hex);
+            if (spaceMemberEvennt instanceof Error) fail(spaceMemberEvennt.message);
+            await relay.add_space_member(spaceMemberEvennt);
             const client = SingleRelayConnection.New(relay.ws_url, {
                 signer: user,
             });
