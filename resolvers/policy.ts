@@ -133,9 +133,6 @@ export const get_space_members = (db: DB): func_GetSpaceMembers => async () => {
 
 export const add_space_member =
     (args: { admin: PublicKey; db: DB }): func_AddSpaceMember => async (event: SpaceMember) => {
-        if (!(await verify_event_v2(event))) {
-            return new Error("Event verification failed");
-        }
         if (event.pubkey != args.admin.hex) {
             return new Error("Only administrators can add members to the space.");
         }

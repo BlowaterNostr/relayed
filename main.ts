@@ -409,7 +409,7 @@ const graphql_login_handler =
         }
         const error = await verifyToken(body, args.relayInformationStore);
         if (error instanceof Error) {
-            return new Response(JSON.stringify(error.message), { status: 400 });
+            return new Response(error.message, { status: 400 });
         } else {
             const auth = btoa(JSON.stringify(body));
             const headers = new Headers();
@@ -433,9 +433,7 @@ const members_handler = async (args: { get_space_members: func_GetSpaceMembers }
         console.error(members);
         return new Response("", { status: 500 });
     }
-    const resp = new Response(JSON.stringify(members.map((event) => event.member)), {
-        status: 200,
-    });
+    const resp = new Response(JSON.stringify(members), { status: 200 });
     resp.headers.set("content-type", "application/json; charset=utf-8");
     resp.headers.set("Access-Control-Allow-Origin", "*");
     resp.headers.set("Access-Control-Allow-Methods", "GET");
