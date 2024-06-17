@@ -1,46 +1,52 @@
 import { typeDefs } from "./graphql-schema.ts";
-import { func_IsMember, SubscriptionMap, ws_handler } from "./ws.ts";
+import { SubscriptionMap, ws_handler } from "./ws.ts";
 import { render } from "https://esm.sh/preact-render-to-string@6.4.1";
 import { RootResolver } from "./resolvers/root.ts";
 import * as gql from "https://esm.sh/graphql@16.8.1";
-import { func_GetRelayMembers, Policy } from "./resolvers/policy.ts";
-import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
-import { PolicyStore } from "./resolvers/policy.ts";
-import { Policies } from "./resolvers/policy.ts";
+import {
+    add_space_member,
+    func_AddSpaceMember,
+    func_GetSpaceMembers,
+    func_IsSpaceMember,
+    func_ResolvePolicyByKind,
+    get_space_members,
+    is_space_member,
+    Policies,
+    Policy,
+    PolicyStore,
+} from "./resolvers/policy.ts";
 import {
     event_schema_sqlite,
     func_GetEventCount,
+    func_GetEventsByFilter,
+    func_WriteRegularEvent,
     func_WriteReplaceableEvent,
+    get_event_count_sqlite,
+    get_events_by_filter_sqlite,
     write_regular_event_sqlite,
     write_replaceable_event_sqlite,
 } from "./resolvers/event.ts";
 import Landing from "./routes/landing.tsx";
 import Error404 from "./routes/_404.tsx";
 import { RelayInfomationBase, RelayInformation, RelayInformationStore } from "./resolvers/nip11.ts";
-import { func_GetEventsByFilter, func_WriteRegularEvent } from "./resolvers/event.ts";
 import { Cookie, getCookies, setCookie } from "https://deno.land/std@0.224.0/http/cookie.ts";
-import { Event_V2, Kind_V2 } from "./events.ts";
+import { Event_V2, Kind_V2, NostrEvent, NostrKind, verify_event_v2, verifyEvent } from "./nostr.ts/nostr.ts";
 import {
     create_channel_sqlite,
     edit_channel_sqlite,
     func_CreateChannel,
     func_EditChannel,
+    func_GetChannelByID,
     get_channel_by_id_sqlite,
     sqlite_schema,
 } from "./channel.ts";
-import { func_GetChannelByID } from "./channel.ts";
 import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
-import { get_relay_members } from "./resolvers/policy.ts";
-import { get_events_by_filter_sqlite } from "./resolvers/event.ts";
-import { get_event_count_sqlite } from "./resolvers/event.ts";
 import {
+    delete_event_sqlite,
     func_DeleteEvent,
     func_DeleteEventsFromPubkey,
     func_GetDeletedEventIDs,
 } from "./resolvers/event_deletion.ts";
-import { delete_event_sqlite } from "./resolvers/event_deletion.ts";
-
-import { NostrEvent, NostrKind, verify_event_v2, verifyEvent } from "./nostr.ts/nostr.ts";
 import { PublicKey } from "./nostr.ts/key.ts";
 import { parseJSON } from "./nostr.ts/_helper.ts";
 
@@ -55,7 +61,6 @@ export type Relay = {
     ws_url: string;
     http_url: string;
     shutdown: () => Promise<void>;
-
     get_event: (id: string) => Promise<NostrEvent | null>;
     set_relay_information: (args: {
         name?: string;
@@ -76,6 +81,10 @@ export type Relay = {
     }) => Promise<Policy | Error>;
     // channel
     get_channel_by_id: func_GetChannelByID;
+    // space member
+    get_space_members: func_GetSpaceMembers;
+    is_space_member: func_IsSpaceMember;
+    add_space_member: func_AddSpaceMember;
     [Symbol.asyncDispose]: () => Promise<void>;
 };
 
@@ -83,7 +92,7 @@ export const ENV_relayed_pubkey = "relayed_pubkey";
 
 export async function run(args: {
     port?: number;
-    admin?: PublicKey;
+    admin?: PublicKey | string;
     auth_required: boolean;
     default_policy: DefaultPolicy;
     default_information?: RelayInfomationBase;
@@ -122,6 +131,12 @@ export async function run(args: {
             return p;
         }
         args.admin = p;
+    } else {
+        if (typeof args.admin == "string") {
+            const p = PublicKey.FromString(args.admin);
+            if (p instanceof Error) return p;
+            args.admin = p;
+        }
     }
     // Relay Key
     // let system_key: string | PrivateKey | Error = args.system_key;
@@ -169,7 +184,6 @@ export async function run(args: {
         },
         root_handler({
             ...args,
-            is_member: is_member({ admin: args.admin, policyStore }),
             // deletion
             delete_event: delete_event_sqlite(db),
             delete_events_from_pubkey: async () => {
@@ -186,7 +200,11 @@ export async function run(args: {
             write_replaceable_event,
             policyStore,
             relayInformationStore,
-            get_relay_members: get_relay_members(db),
+            // space member
+            get_space_members: get_space_members(db),
+            add_space_member: add_space_member({ admin: args.admin, db }),
+            is_space_member: is_space_member({ admin: args.admin, db }),
+            // channel
             create_channel: create_channel_sqlite(db),
             edit_channel: edit_channel_sqlite(db),
             kv: kv,
@@ -228,6 +246,10 @@ export async function run(args: {
         get_channel_by_id: (id: string) => {
             return get_channel_by_id(id);
         },
+        // space member
+        get_space_members: get_space_members(db),
+        is_space_member: is_space_member({ admin: args.admin, db }),
+        add_space_member: add_space_member({ admin: args.admin, db }),
         [Symbol.asyncDispose]() {
             return shutdown();
         },
@@ -241,7 +263,6 @@ const root_handler = (
         resolvePolicyByKind: func_ResolvePolicyByKind;
         policyStore: PolicyStore;
         relayInformationStore: RelayInformationStore;
-        is_member: func_IsMember;
         // channel
         create_channel: func_CreateChannel;
         edit_channel: func_EditChannel;
@@ -255,8 +276,10 @@ const root_handler = (
         // write
         write_regular_event: func_WriteRegularEvent;
         write_replaceable_event: func_WriteReplaceableEvent;
-        // relay
-        get_relay_members: func_GetRelayMembers;
+        // space member
+        get_space_members: func_GetSpaceMembers;
+        add_space_member: func_AddSpaceMember;
+        is_space_member: func_IsSpaceMember;
         // config
         auth_required: boolean;
         kv: Deno.Kv;
@@ -269,28 +292,10 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
     }
     const url = new URL(req.url);
     if (url.pathname === "/api/auth/login") {
-        const body = await req.json();
-        if (!body) {
-            return new Response(`{"errors":"request body is null"}`, { status: 400 });
-        }
-        const error = await verifyToken(body, args.relayInformationStore);
-        if (error instanceof Error) {
-            return new Response(JSON.stringify(error.message), { status: 400 });
-        } else {
-            const auth = btoa(JSON.stringify(body));
-            const headers = new Headers();
-            const cookie: Cookie = {
-                name: "token",
-                value: auth,
-                path: "/",
-                secure: true,
-                httpOnly: true,
-                sameSite: "Strict",
-            };
-            setCookie(headers, cookie);
-            const resp = new Response("", { status: 200, headers });
-            return resp;
-        }
+        return graphql_login_handler(args)(req);
+    }
+    if (url.pathname == "/api/members") {
+        return members_handler(args);
     }
     if (url.pathname == "/api") {
         return graphql_handler(args)(req);
@@ -315,33 +320,7 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
                 }
             }
         } else if (req.method == "POST") {
-            const text = await req.text();
-            const event = parseJSON<Event_V2>(text);
-            if (event instanceof Error) {
-                return new Response(event.message, {
-                    status: 400,
-                });
-            }
-            const ok = await verify_event_v2(event);
-            if (!ok) {
-                return new Response("event is not valid", { status: 400 });
-            }
-            if (event.kind == Kind_V2.ChannelCreation) {
-                const ok = await args.create_channel(event);
-                if (ok) {
-                    return new Response();
-                } else {
-                    return new Response("failed to write event", { status: 400 });
-                }
-            } else if (event.kind == Kind_V2.ChannelEdition) {
-                const res = await args.edit_channel(event);
-                if (res instanceof Error) {
-                    return new Response(res.message, { status: 400 });
-                }
-                return new Response();
-            } else {
-                return new Response(`not a recognizable event`, { status: 400 });
-            }
+            return event_v2_handler(args)(req);
         }
     }
     const resp = new Response(render(Error404()), { status: 404 });
@@ -358,6 +337,7 @@ const graphql_handler = (
         // get
         get_events_by_filter: func_GetEventsByFilter;
         get_event_count: func_GetEventCount;
+        get_space_members: func_GetSpaceMembers;
         // write
         write_regular_event: func_WriteRegularEvent;
         write_replaceable_event: func_WriteReplaceableEvent;
@@ -365,8 +345,6 @@ const graphql_handler = (
         delete_event: func_DeleteEvent;
         delete_events_from_pubkey: func_DeleteEventsFromPubkey;
         get_deleted_event_ids: func_GetDeletedEventIDs;
-        // relay members
-        get_relay_members: func_GetRelayMembers;
         // kv
         kv: Deno.Kv;
     },
@@ -423,6 +401,46 @@ async (req: Request) => {
 export const supported_nips = [1, 2, 11];
 export const software = "https://github.com/BlowaterNostr/relayed";
 
+const graphql_login_handler =
+    (args: { relayInformationStore: RelayInformationStore }) => async (req: Request) => {
+        const body = await req.json();
+        if (!body) {
+            return new Response(`{"errors":"request body is null"}`, { status: 400 });
+        }
+        const error = await verifyToken(body, args.relayInformationStore);
+        if (error instanceof Error) {
+            return new Response(error.message, { status: 400 });
+        } else {
+            const auth = btoa(JSON.stringify(body));
+            const headers = new Headers();
+            const cookie: Cookie = {
+                name: "token",
+                value: auth,
+                path: "/",
+                secure: true,
+                httpOnly: true,
+                sameSite: "Strict",
+            };
+            setCookie(headers, cookie);
+            const resp = new Response("", { status: 200, headers });
+            return resp;
+        }
+    };
+
+const members_handler = async (args: { get_space_members: func_GetSpaceMembers }) => {
+    const members = await args.get_space_members();
+    if (members instanceof Error) {
+        console.error(members);
+        return new Response("", { status: 500 });
+    }
+    const resp = new Response(JSON.stringify(members), { status: 200 });
+    resp.headers.set("content-type", "application/json; charset=utf-8");
+    resp.headers.set("Access-Control-Allow-Origin", "*");
+    resp.headers.set("Access-Control-Allow-Methods", "GET");
+    resp.headers.set("Access-Control-Allow-Headers", "accept,content-type");
+    return resp;
+};
+
 const landing_handler = async (args: { relayInformationStore: RelayInformationStore }) => {
     const storeInformation = await args.relayInformationStore.resolveRelayInformation();
     if (storeInformation instanceof Error) {
@@ -450,6 +468,49 @@ const information_handler = async (args: { relayInformationStore: RelayInformati
     return resp;
 };
 
+const event_v2_handler = (args: {
+    create_channel: func_CreateChannel;
+    edit_channel: func_EditChannel;
+    add_space_member: func_AddSpaceMember;
+}) =>
+async (req: Request) => {
+    const text = await req.text();
+    const event = parseJSON<Event_V2>(text);
+    if (event instanceof Error) {
+        return new Response(event.message, {
+            status: 400,
+        });
+    }
+    const ok = await verify_event_v2(event);
+    if (!ok) {
+        console.error("event", event);
+        return new Response("event is not valid", { status: 400 });
+    }
+    if (event.kind == Kind_V2.ChannelCreation) {
+        const ok = await args.create_channel(event);
+        if (ok) {
+            return new Response();
+        } else {
+            return new Response("failed to write event", { status: 400 });
+        }
+    } else if (event.kind == Kind_V2.ChannelEdition) {
+        const res = await args.edit_channel(event);
+        if (res instanceof Error) {
+            return new Response(res.message, { status: 400 });
+        }
+        return new Response();
+    } else if (event.kind == Kind_V2.SpaceMember) {
+        const res = await args.add_space_member(event);
+        if (res instanceof Error) {
+            console.error(res);
+            return new Response(res.message, { status: 400 });
+        }
+        return new Response();
+    } else {
+        return new Response(`not a recognizable event`, { status: 400 });
+    }
+};
+
 async function verifyToken(event: NostrEvent, relayInformationStore: RelayInformationStore) {
     if (!await verifyEvent(event)) {
         return new Error("token not verified");
@@ -466,28 +527,6 @@ async function verifyToken(event: NostrEvent, relayInformationStore: RelayInform
         return new Error("your pubkey is not an admin");
     }
 }
-
-const is_member = (args: {
-    admin: PublicKey;
-    policyStore: PolicyStore;
-}): func_IsMember =>
-async (pubkey: string) => {
-    const { admin, policyStore } = args;
-    const key = PublicKey.FromString(pubkey);
-    if (key instanceof Error) {
-        return key;
-    }
-    if (key.hex == admin.hex) {
-        return true;
-    }
-    const policy = await policyStore.resolvePolicyByKind(NostrKind.TEXT_NOTE);
-    if (policy instanceof Error) {
-        return policy;
-    }
-    const policyAllow = policy.allow.has(pubkey);
-    const policyBlock = policy.block.has(pubkey);
-    return policyAllow && !policyBlock;
-};
 
 const graphiql = `
 <!--

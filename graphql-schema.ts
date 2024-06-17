@@ -13,7 +13,6 @@ export const typeDefs = gql`
     relayInformation: RelayInformation
     channel(name: String!): Channel
     deleted_events: [String!]!
-    members: [String!]!
   }
 
   type Mutation {

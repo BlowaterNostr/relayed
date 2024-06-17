@@ -1,6 +1,6 @@
 import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
 import { DefaultPolicy } from "../main.ts";
-import { EventRelayMembers, Kind_V2 } from "../events.ts";
+import { Kind_V2, SpaceMember, verify_event_v2 } from "../nostr.ts/nostr.ts";
 import { parseJSON } from "../nostr.ts/_helper.ts";
 import { PublicKey } from "../nostr.ts/key.ts";
 import { NostrKind } from "../nostr.ts/nostr.ts";
@@ -111,29 +111,54 @@ export class PolicyStore {
     };
 }
 
-export type func_GetRelayMembers = () => Promise<undefined | EventRelayMembers | Error>;
-export const get_relay_members = (db?: DB): func_GetRelayMembers => async () => {
-    if (!db) {
-        return new Error("get_relay_members is not supported");
-    }
+export type func_GetSpaceMembers = () => Promise<SpaceMember[] | Error>;
+export type func_AddSpaceMember = (event: SpaceMember) => Promise<void | Error>;
+export type func_IsSpaceMember = (pubkey: string) => Promise<boolean | Error>;
+
+export const get_space_members = (db: DB): func_GetSpaceMembers => async () => {
     const rows = db.query<[string]>(
         "select event from events_v2 where kind = (?)",
-        [Kind_V2.RelayMember],
+        [Kind_V2.SpaceMember],
     );
-
-    const events = [] as EventRelayMembers[];
+    const events = [] as SpaceMember[];
     for (const row of rows) {
-        const relay_member_event = parseJSON<EventRelayMembers>(row[0]);
-        if (relay_member_event instanceof Error) {
-            return relay_member_event;
+        const space_member_event = parseJSON<SpaceMember>(row[0]);
+        if (space_member_event instanceof Error) {
+            return space_member_event;
         }
-        events.push(relay_member_event);
+        events.push(space_member_event);
     }
-    if (events.length == 0) {
-        return;
-    }
-
-    const event = events.sort((e1, e2) => e1.created_at - e2.created_at)[0];
-    console.log(event);
-    return event;
+    return events;
 };
+
+export const add_space_member =
+    (args: { admin: PublicKey; db: DB }): func_AddSpaceMember => async (event: SpaceMember) => {
+        if (event.pubkey != args.admin.hex) {
+            return new Error("Only administrators can add members to the space.");
+        }
+        if (await is_space_member({ ...args })(event.member)) {
+            return new Error(`${event.member} is already a member of the space.`);
+        }
+        try {
+            args.db.query(
+                `INSERT INTO events_v2(id, pubkey, kind, event) VALUES (?, ?, ?, ?)`,
+                [event.id, event.pubkey, event.kind, JSON.stringify(event)],
+            );
+        } catch (e) {
+            return e as Error;
+        }
+    };
+
+export const is_space_member =
+    (args: { admin: PublicKey; db: DB }): func_IsSpaceMember => async (pubkey: string) => {
+        if (args.admin.hex === pubkey) return true;
+        try {
+            const rows = args.db.query<[string]>(
+                "select event from events_v2 where kind = (?) and json_extract(event, '$.member') = (?)",
+                [Kind_V2.SpaceMember, pubkey],
+            );
+            return rows.length > 0;
+        } catch (e) {
+            return e as Error;
+        }
+    };

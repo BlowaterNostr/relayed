@@ -1,23 +1,29 @@
 // deno-lint-ignore-file no-empty
 import { ENV_relayed_pubkey, Relay, run, software, supported_nips } from "../main.ts";
-import { assertEquals } from "https://deno.land/std@0.202.0/assert/assert_equals.ts";
-import { assertIsError, assertNotInstanceOf } from "https://deno.land/std@0.202.0/assert/mod.ts";
-import { fail } from "https://deno.land/std@0.202.0/assert/fail.ts";
+import {
+    assertEquals,
+    assertIsError,
+    assertNotInstanceOf,
+} from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { fail } from "https://deno.land/std@0.224.0/assert/fail.ts";
 
 import * as client_test from "../nostr.ts/relay-single-test.ts";
-import { ChannelCreation, ChannelEdition } from "../events.ts";
-import { Kind_V2 } from "../events.ts";
 import {
+    ChannelCreation,
+    ChannelEdition,
     InMemoryAccountContext,
+    Kind_V2,
     NostrKind,
     RelayResponse_Event,
-    sign_event_v2,
     Signer,
 } from "../nostr.ts/nostr.ts";
 import { prepareNormalNostrEvent } from "../nostr.ts/event.ts";
 import { RelayRejectedEvent, SingleRelayConnection, SubscriptionStream } from "../nostr.ts/relay-single.ts";
-import { PrivateKey, PublicKey } from "../nostr.ts/key.ts";
+import { PrivateKey } from "../nostr.ts/key.ts";
 import { sleep } from "https://raw.githubusercontent.com/BlowaterNostr/csp/master/csp.ts";
+import { RFC3339 } from "../nostr.ts/_helper.ts";
+import { format } from "https://deno.land/std@0.224.0/datetime/format.ts";
+import { prepareSpaceMember } from "../nostr.ts/space-member.ts";
 
 const test_kv = async () => {
     try {
@@ -191,14 +197,13 @@ Deno.test({
         }
 
         {
-            const pri = PrivateKey.Generate();
-            const pub = pri.toPublicKey().hex;
-            // create the channel
-            const ChannelCreation_event = await sign_event_v2(pri, {
-                pubkey: pub,
+            const ctx = InMemoryAccountContext.Generate();
+            const ChannelCreation_event: ChannelCreation = await ctx.signEventV2({
+                pubkey: ctx.publicKey.hex,
                 kind: Kind_V2.ChannelCreation,
                 name: "test",
                 scope: "server",
+                created_at: format(new Date(), RFC3339),
             });
             const r = await fetch(`${relay.http_url}`, {
                 method: "POST",
@@ -215,12 +220,13 @@ Deno.test({
             });
 
             // edit the channel
-            const event_edit = await sign_event_v2(pri, {
-                pubkey: pub,
+            const event_edit = await ctx.signEventV2({
+                pubkey: ctx.publicKey.hex,
                 kind: Kind_V2.ChannelEdition,
                 channel_id: ChannelCreation_event.id,
                 name: "test2",
                 scope: "server",
+                created_at: format(new Date(), RFC3339),
             });
             const r2 = await fetch(`${relay.http_url}`, {
                 method: "POST",
@@ -363,9 +369,9 @@ Deno.test({
     name: "Authorization",
     // ignore: true,
     fn: async (t) => {
-        const pri = PrivateKey.Generate();
+        const ctx = InMemoryAccountContext.Generate();
         const relay = await run({
-            admin: pri.toPublicKey(),
+            admin: ctx.publicKey.hex,
             kv: await test_kv(),
             default_policy: {
                 allowed_kinds: "all",
@@ -373,11 +379,10 @@ Deno.test({
             auth_required: true,
         });
         if (relay instanceof Error) fail(relay.message);
-        const admin = InMemoryAccountContext.FromString(pri.hex) as Signer;
 
         await t.step("admin is always allowed", async () => {
             const client = SingleRelayConnection.New(relay.ws_url, {
-                signer: admin,
+                signer: ctx,
             });
             const err = await client.newSub("", {});
             assertNotInstanceOf(err, Error);
@@ -386,10 +391,9 @@ Deno.test({
 
         await t.step("a member is allowed", async () => {
             const user = InMemoryAccountContext.Generate();
-            await relay.set_policy({
-                kind: NostrKind.TEXT_NOTE,
-                allow: new Set([user.publicKey.hex]),
-            });
+            const spaceMemberEvennt = await prepareSpaceMember(ctx, user.publicKey.hex);
+            if (spaceMemberEvennt instanceof Error) fail(spaceMemberEvennt.message);
+            await relay.add_space_member(spaceMemberEvennt);
             const client = SingleRelayConnection.New(relay.ws_url, {
                 signer: user,
             });
@@ -403,7 +407,7 @@ Deno.test({
             const client = SingleRelayConnection.New(relay.ws_url, {
                 signer: InMemoryAccountContext.Generate(),
             });
-            await sleep(10);
+            await sleep(30);
             const err = await client.newSub("", {});
             assertIsError(err, Error);
             await client.close();

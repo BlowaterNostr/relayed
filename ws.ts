@@ -1,5 +1,5 @@
 // deno-lint-ignore-file
-import { func_ResolvePolicyByKind } from "./resolvers/policy.ts";
+import { func_IsSpaceMember, func_ResolvePolicyByKind } from "./resolvers/policy.ts";
 import { atobSafe, DefaultPolicy } from "./main.ts";
 import { func_WriteRegularEvent, func_WriteReplaceableEvent } from "./resolvers/event.ts";
 
@@ -22,8 +22,6 @@ import {
     verifyEvent,
 } from "./nostr.ts/nostr.ts";
 
-export type func_IsMember = (pubkey: string) => Promise<boolean | Error>;
-
 export const ws_handler = (
     args: {
         connections: Map<WebSocket, SubscriptionMap>;
@@ -33,7 +31,7 @@ export const ws_handler = (
         write_regular_event: func_WriteRegularEvent;
         write_replaceable_event: func_WriteReplaceableEvent;
         delete_event: func_DeleteEvent;
-        is_member: func_IsMember;
+        is_space_member: func_IsSpaceMember;
         auth_required: boolean;
     },
 ) =>
@@ -71,7 +69,7 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
                 return;
             }
 
-            const ok = await args.is_member(event.pubkey);
+            const ok = await args.is_space_member(event.pubkey);
             if (!ok) {
                 socket.close(3000, `pubkey ${event.pubkey} is not allowed`);
                 return;
