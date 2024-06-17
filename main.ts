@@ -134,9 +134,7 @@ export async function run(args: {
     } else {
         if (typeof args.admin == "string") {
             const p = PublicKey.FromString(args.admin);
-            if (p instanceof Error) {
-                return new Error("invalid admin public key");
-            }
+            if (p instanceof Error) return p;
             args.admin = p;
         }
     }
@@ -432,13 +430,10 @@ const graphql_login_handler =
 const members_handler = async (args: { get_space_members: func_GetSpaceMembers }) => {
     const members = await args.get_space_members();
     if (members instanceof Error) {
-        console.log(members);
+        console.error(members);
         return new Response("", { status: 500 });
     }
-    const body = {
-        data: members.map((event) => event.member),
-    };
-    const resp = new Response(JSON.stringify(body), {
+    const resp = new Response(JSON.stringify(members.map((event) => event.member)), {
         status: 200,
     });
     resp.headers.set("content-type", "application/json; charset=utf-8");
