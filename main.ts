@@ -47,7 +47,7 @@ import {
     func_DeleteEventsFromPubkey,
     func_GetDeletedEventIDs,
 } from "./resolvers/event_deletion.ts";
-import { InvalidKey, PublicKey } from "./nostr.ts/key.ts";
+import { PublicKey } from "./nostr.ts/key.ts";
 import { parseJSON } from "./nostr.ts/_helper.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
@@ -206,7 +206,7 @@ export async function run(args: {
             add_space_member: add_space_member(db),
             is_space_member: is_space_member({
                 admin: args.admin,
-                db
+                db,
             }),
             // channel
             create_channel: create_channel_sqlite(db),
@@ -295,46 +295,10 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
     }
     const url = new URL(req.url);
     if (url.pathname === "/api/auth/login") {
-        const body = await req.json();
-        if (!body) {
-            return new Response(`{"errors":"request body is null"}`, { status: 400 });
-        }
-        const error = await verifyToken(body, args.relayInformationStore);
-        if (error instanceof Error) {
-            return new Response(JSON.stringify(error.message), { status: 400 });
-        } else {
-            const auth = btoa(JSON.stringify(body));
-            const headers = new Headers();
-            const cookie: Cookie = {
-                name: "token",
-                value: auth,
-                path: "/",
-                secure: true,
-                httpOnly: true,
-                sameSite: "Strict",
-            };
-            setCookie(headers, cookie);
-            const resp = new Response("", { status: 200, headers });
-            return resp;
-        }
+        return graphql_login_handler(args)(req);
     }
     if (url.pathname == "/api/members") {
-        const members = await args.get_space_members();
-        if (members instanceof Error) {
-            console.log(members);
-            return new Response("", { status: 500 });
-        }
-        const body = {
-            data: members.map((event) => event.member),
-        };
-        const resp = new Response(JSON.stringify(body), {
-            status: 200,
-        });
-        resp.headers.set("content-type", "application/json; charset=utf-8");
-        resp.headers.set("Access-Control-Allow-Origin", "*");
-        resp.headers.set("Access-Control-Allow-Methods", "GET");
-        resp.headers.set("Access-Control-Allow-Headers", "accept,content-type");
-        return resp;
+        return members_handler(args);
     }
     if (url.pathname == "/api") {
         return graphql_handler(args)(req);
@@ -359,41 +323,7 @@ async (req: Request, info: Deno.ServeHandlerInfo) => {
                 }
             }
         } else if (req.method == "POST") {
-            const text = await req.text();
-            const event = parseJSON<Event_V2>(text);
-            if (event instanceof Error) {
-                return new Response(event.message, {
-                    status: 400,
-                });
-            }
-            const ok = await verify_event_v2(event);
-            if (!ok) {
-                console.error("event", event);
-                return new Response("event is not valid", { status: 400 });
-            }
-            if (event.kind == Kind_V2.ChannelCreation) {
-                const ok = await args.create_channel(event);
-                if (ok) {
-                    return new Response();
-                } else {
-                    return new Response("failed to write event", { status: 400 });
-                }
-            } else if (event.kind == Kind_V2.ChannelEdition) {
-                const res = await args.edit_channel(event);
-                if (res instanceof Error) {
-                    return new Response(res.message, { status: 400 });
-                }
-                return new Response();
-            } else if (event.kind == Kind_V2.SpaceMember) {
-                const res = await args.add_space_member(event);
-                if (res instanceof Error) {
-                    console.error(res);
-                    return new Response(res.message, { status: 400 });
-                }
-                return new Response();
-            } else {
-                return new Response(`not a recognizable event`, { status: 400 });
-            }
+            return event_v2_handler(args)(req);
         }
     }
     const resp = new Response(render(Error404()), { status: 404 });
@@ -474,6 +404,51 @@ async (req: Request) => {
 export const supported_nips = [1, 2, 11];
 export const software = "https://github.com/BlowaterNostr/relayed";
 
+const graphql_login_handler =
+    (args: { relayInformationStore: RelayInformationStore }) => async (req: Request) => {
+        const body = await req.json();
+        if (!body) {
+            return new Response(`{"errors":"request body is null"}`, { status: 400 });
+        }
+        const error = await verifyToken(body, args.relayInformationStore);
+        if (error instanceof Error) {
+            return new Response(JSON.stringify(error.message), { status: 400 });
+        } else {
+            const auth = btoa(JSON.stringify(body));
+            const headers = new Headers();
+            const cookie: Cookie = {
+                name: "token",
+                value: auth,
+                path: "/",
+                secure: true,
+                httpOnly: true,
+                sameSite: "Strict",
+            };
+            setCookie(headers, cookie);
+            const resp = new Response("", { status: 200, headers });
+            return resp;
+        }
+    };
+
+const members_handler = async (args: { get_space_members: func_GetSpaceMembers }) => {
+    const members = await args.get_space_members();
+    if (members instanceof Error) {
+        console.log(members);
+        return new Response("", { status: 500 });
+    }
+    const body = {
+        data: members.map((event) => event.member),
+    };
+    const resp = new Response(JSON.stringify(body), {
+        status: 200,
+    });
+    resp.headers.set("content-type", "application/json; charset=utf-8");
+    resp.headers.set("Access-Control-Allow-Origin", "*");
+    resp.headers.set("Access-Control-Allow-Methods", "GET");
+    resp.headers.set("Access-Control-Allow-Headers", "accept,content-type");
+    return resp;
+};
+
 const landing_handler = async (args: { relayInformationStore: RelayInformationStore }) => {
     const storeInformation = await args.relayInformationStore.resolveRelayInformation();
     if (storeInformation instanceof Error) {
@@ -499,6 +474,49 @@ const information_handler = async (args: { relayInformationStore: RelayInformati
     resp.headers.set("Access-Control-Allow-Methods", "GET");
     resp.headers.set("Access-Control-Allow-Headers", "accept,content-type");
     return resp;
+};
+
+const event_v2_handler = (args: {
+    create_channel: func_CreateChannel;
+    edit_channel: func_EditChannel;
+    add_space_member: func_AddSpaceMember;
+}) =>
+async (req: Request) => {
+    const text = await req.text();
+    const event = parseJSON<Event_V2>(text);
+    if (event instanceof Error) {
+        return new Response(event.message, {
+            status: 400,
+        });
+    }
+    const ok = await verify_event_v2(event);
+    if (!ok) {
+        console.error("event", event);
+        return new Response("event is not valid", { status: 400 });
+    }
+    if (event.kind == Kind_V2.ChannelCreation) {
+        const ok = await args.create_channel(event);
+        if (ok) {
+            return new Response();
+        } else {
+            return new Response("failed to write event", { status: 400 });
+        }
+    } else if (event.kind == Kind_V2.ChannelEdition) {
+        const res = await args.edit_channel(event);
+        if (res instanceof Error) {
+            return new Response(res.message, { status: 400 });
+        }
+        return new Response();
+    } else if (event.kind == Kind_V2.SpaceMember) {
+        const res = await args.add_space_member(event);
+        if (res instanceof Error) {
+            console.error(res);
+            return new Response(res.message, { status: 400 });
+        }
+        return new Response();
+    } else {
+        return new Response(`not a recognizable event`, { status: 400 });
+    }
 };
 
 async function verifyToken(event: NostrEvent, relayInformationStore: RelayInformationStore) {

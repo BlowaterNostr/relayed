@@ -19,7 +19,7 @@ import {
 } from "../nostr.ts/nostr.ts";
 import { prepareNormalNostrEvent } from "../nostr.ts/event.ts";
 import { RelayRejectedEvent, SingleRelayConnection, SubscriptionStream } from "../nostr.ts/relay-single.ts";
-import { PrivateKey, PublicKey } from "../nostr.ts/key.ts";
+import { PrivateKey } from "../nostr.ts/key.ts";
 import { sleep } from "https://raw.githubusercontent.com/BlowaterNostr/csp/master/csp.ts";
 import { RFC3339 } from "../nostr.ts/_helper.ts";
 import { format } from "https://deno.land/std@0.224.0/datetime/format.ts";
