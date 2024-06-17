@@ -1,8 +1,11 @@
 // deno-lint-ignore-file no-empty
 import { ENV_relayed_pubkey, Relay, run, software, supported_nips } from "../main.ts";
-import { assertEquals } from "https://deno.land/std@0.202.0/assert/assert_equals.ts";
-import { assertIsError, assertNotInstanceOf } from "https://deno.land/std@0.202.0/assert/mod.ts";
-import { fail } from "https://deno.land/std@0.202.0/assert/fail.ts";
+import {
+    assertEquals,
+    assertIsError,
+    assertNotInstanceOf,
+} from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { fail } from "https://deno.land/std@0.224.0/assert/fail.ts";
 
 import * as client_test from "../nostr.ts/relay-single-test.ts";
 import {
@@ -12,14 +15,14 @@ import {
     Kind_V2,
     NostrKind,
     RelayResponse_Event,
-    sign_event_v2,
     Signer,
 } from "../nostr.ts/nostr.ts";
 import { prepareNormalNostrEvent } from "../nostr.ts/event.ts";
 import { RelayRejectedEvent, SingleRelayConnection, SubscriptionStream } from "../nostr.ts/relay-single.ts";
 import { PrivateKey, PublicKey } from "../nostr.ts/key.ts";
 import { sleep } from "https://raw.githubusercontent.com/BlowaterNostr/csp/master/csp.ts";
-import { nowRFC3339 } from "../nostr.ts/_helper.ts";
+import { RFC3339 } from "../nostr.ts/_helper.ts";
+import { format } from "https://deno.land/std@0.224.0/datetime/format.ts";
 
 const test_kv = async () => {
     try {
@@ -193,14 +196,13 @@ Deno.test({
         }
 
         {
-            const pri = PrivateKey.Generate();
-            const pub = pri.toPublicKey().hex;
-            // create the channel
-            const ChannelCreation_event = await sign_event_v2(pri, {
-                pubkey: pub,
+            const ctx = InMemoryAccountContext.Generate();
+            const ChannelCreation_event: ChannelCreation = await ctx.signEventV2({
+                pubkey: ctx.publicKey.hex,
                 kind: Kind_V2.ChannelCreation,
                 name: "test",
                 scope: "server",
+                created_at: format(new Date(), RFC3339),
             });
             const r = await fetch(`${relay.http_url}`, {
                 method: "POST",
@@ -217,13 +219,13 @@ Deno.test({
             });
 
             // edit the channel
-            const event_edit = await sign_event_v2(pri, {
-                pubkey: pub,
+            const event_edit = await ctx.signEventV2({
+                pubkey: ctx.publicKey.hex,
                 kind: Kind_V2.ChannelEdition,
                 channel_id: ChannelCreation_event.id,
                 name: "test2",
                 scope: "server",
-                created_at: nowRFC3339(),
+                created_at: format(new Date(), RFC3339),
             });
             const r2 = await fetch(`${relay.http_url}`, {
                 method: "POST",

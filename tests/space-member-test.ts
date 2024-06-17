@@ -1,8 +1,8 @@
 import { Relay, run } from "../main.ts";
 import { InMemoryAccountContext } from "../nostr.ts/nostr.ts";
-import { fail } from "https://deno.land/std@0.202.0/assert/fail.ts";
+import { fail } from "https://deno.land/std@0.224.0/assert/fail.ts";
 import { assertEquals } from "https://deno.land/std@0.220.1/assert/assert_equals.ts";
-import { prepareAddMember } from "../nostr.ts/space-member.ts";
+import { prepareSpaceMember } from "../nostr.ts/space-member.ts";
 
 const test_ctx = InMemoryAccountContext.Generate();
 const test_kv = async () => {
@@ -24,7 +24,7 @@ Deno.test("Space Member", async (t) => {
     const new_member = InMemoryAccountContext.Generate();
 
     await t.step("add member", async () => {
-        const add_member_event = await prepareAddMember(test_ctx, new_member.publicKey.hex);
+        const add_member_event = await prepareSpaceMember(test_ctx, new_member.publicKey.hex);
         if (add_member_event instanceof Error) fail(add_member_event.message);
         const r = await fetch(`${relay.http_url}`, {
             method: "POST",
@@ -38,7 +38,7 @@ Deno.test("Space Member", async (t) => {
     });
 
     await t.step("it it already a member", async () => {
-        const redo = await prepareAddMember(test_ctx, new_member.publicKey.hex);
+        const redo = await prepareSpaceMember(test_ctx, new_member.publicKey.hex);
         if (redo instanceof Error) fail(redo.message);
         const r = await fetch(`${relay.http_url}`, {
             method: "POST",

@@ -10,7 +10,6 @@ export function RootResolver({ deps }: {
         policyStore: PolicyStore;
         relayInformationStore: RelayInformationStore;
         get_event_count: func_GetEventCount;
-        get_space_members: func_GetSpaceMembers;
         delete_event: func_DeleteEvent;
         delete_events_from_pubkey: func_DeleteEventsFromPubkey;
         get_deleted_event_ids: func_GetDeletedEventIDs;
@@ -28,7 +27,6 @@ function Queries(deps: {
     relayInformationStore: RelayInformationStore;
     get_event_count: func_GetEventCount;
     get_deleted_event_ids: func_GetDeletedEventIDs;
-    get_space_members: func_GetSpaceMembers;
     kv: Deno.Kv;
 }) {
     return {
@@ -58,14 +56,6 @@ function Queries(deps: {
         },
         deleted_events: async () => {
             return deps.get_deleted_event_ids();
-        },
-        members: async () => {
-            const members = await deps.get_space_members();
-            if (members instanceof Error) {
-                console.error(members);
-                throw members;
-            }
-            return members;
         },
     };
 }

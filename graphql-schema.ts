@@ -13,7 +13,6 @@ export const typeDefs = gql`
     relayInformation: RelayInformation
     channel(name: String!): Channel
     deleted_events: [String!]!
-    members: [SpaceMember!]!
   }
 
   type Mutation {
@@ -72,13 +71,5 @@ export const typeDefs = gql`
     software: String
     version: String
     icon: String
-  }
-  type SpaceMember {
-    id: String!
-    pubkey: String!
-    kind: String!
-    created_at: String!
-    member: String!
-    sig: String!
   }
 `;
