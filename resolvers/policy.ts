@@ -134,21 +134,25 @@ export const get_space_members = (db?: DB): func_GetSpaceMembers => async () => 
     return events;
 };
 
-export const add_space_member = (db?: DB): func_AddSpaceMember => async (event: SpaceMember) => {
-    if (!db) {
-        return new Error("add_space_member is not supported");
-    }
-    if (!(await verify_event_v2(event))) {
-        return new Error("Event verification failed");
-    }
-    if (await is_space_member({ db })(event.member)) {
-        return new Error(`${event.member} is already a member of the space.`);
-    }
-    db.query(
-        `INSERT INTO events_v2(id, pubkey, kind, event) VALUES (?, ?, ?, ?)`,
-        [event.id, event.pubkey, event.kind, JSON.stringify(event)],
-    );
-};
+export const add_space_member =
+    (args: { admin: PublicKey; db?: DB }): func_AddSpaceMember => async (event: SpaceMember) => {
+        if (!args.db) {
+            return new Error("add_space_member is not supported");
+        }
+        if (!(await verify_event_v2(event))) {
+            return new Error("Event verification failed");
+        }
+        if (event.pubkey != args.admin.hex) {
+            return new Error("Only administrators can add members to the space.");
+        }
+        if (await is_space_member({ db: args.db })(event.member)) {
+            return new Error(`${event.member} is already a member of the space.`);
+        }
+        args.db.query(
+            `INSERT INTO events_v2(id, pubkey, kind, event) VALUES (?, ?, ?, ?)`,
+            [event.id, event.pubkey, event.kind, JSON.stringify(event)],
+        );
+    };
 
 export const is_space_member =
     (args: { admin?: PublicKey; db?: DB }): func_IsSpaceMember => async (pubkey: string) => {

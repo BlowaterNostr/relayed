@@ -204,11 +204,8 @@ export async function run(args: {
             relayInformationStore,
             // space member
             get_space_members: get_space_members(db),
-            add_space_member: add_space_member(db),
-            is_space_member: is_space_member({
-                admin: args.admin,
-                db,
-            }),
+            add_space_member: add_space_member({ admin: args.admin, db }),
+            is_space_member: is_space_member({ admin: args.admin, db }),
             // channel
             create_channel: create_channel_sqlite(db),
             edit_channel: edit_channel_sqlite(db),
@@ -254,7 +251,7 @@ export async function run(args: {
         // space member
         get_space_members: get_space_members(db),
         is_space_member: is_space_member({ admin: args.admin, db }),
-        add_space_member: add_space_member(db),
+        add_space_member: add_space_member({ admin: args.admin, db }),
         [Symbol.asyncDispose]() {
             return shutdown();
         },
