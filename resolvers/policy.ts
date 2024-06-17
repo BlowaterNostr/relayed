@@ -1,6 +1,6 @@
 import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
 import { DefaultPolicy } from "../main.ts";
-import { Kind_V2, SpaceMember } from "../nostr.ts/nostr.ts";
+import { Kind_V2, SpaceMember, verify_event_v2 } from "../nostr.ts/nostr.ts";
 import { parseJSON } from "../nostr.ts/_helper.ts";
 import { PublicKey } from "../nostr.ts/key.ts";
 import { NostrKind } from "../nostr.ts/nostr.ts";
@@ -137,6 +137,9 @@ export const get_space_members = (db?: DB): func_GetSpaceMembers => async () => 
 export const add_space_member = (db?: DB): func_AddSpaceMember => async (event: SpaceMember) => {
     if (!db) {
         return new Error("add_space_member is not supported");
+    }
+    if (!(await verify_event_v2(event))) {
+        return new Error("Event verification failed");
     }
     if (await is_space_member({ db })(event.member)) {
         return new Error(`${event.member} is already a member of the space.`);
