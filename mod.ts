@@ -1329,6 +1329,7 @@ class InvalidKey extends Error {
         this.name = "InvalidKey";
     }
 }
+new TextEncoder();
 new TextEncoder().encode("0123456789abcdef");
 new TextEncoder();
 new TextDecoder();
@@ -5798,6 +5799,12 @@ I10(c16, {
 var U12 = j17(N8());
 o16(c16, j17(N8()));
 var { default: R8, ...V9 } = U12, W7 = R8 !== void 0 ? R8 : V9;
+var Kind_V2;
+(function(Kind_V2) {
+    Kind_V2["ChannelCreation"] = "ChannelCreation";
+    Kind_V2["ChannelEdition"] = "ChannelEdition";
+    Kind_V2["SpaceMember"] = "SpaceMember";
+})(Kind_V2 || (Kind_V2 = {}));
 var NostrKind;
 (function(NostrKind) {
     NostrKind[NostrKind["META_DATA"] = 0] = "META_DATA";
@@ -7387,7 +7394,6 @@ const typeDefs = gql`
     relayInformation: RelayInformation
     channel(name: String!): Channel
     deleted_events: [String!]!
-    members: [String!]!
   }
 
   type Mutation {
@@ -8242,12 +8248,6 @@ var pe2 = new Set([
     "track",
     "wbr"
 ]), ve = q19;
-var Kind_V2;
-(function(Kind_V2) {
-    Kind_V2["ChannelCreation"] = "ChannelCreation";
-    Kind_V2["ChannelEdition"] = "ChannelEdition";
-    Kind_V2["RelayMember"] = "RelayMember";
-})(Kind_V2 || (Kind_V2 = {}));
 const Policies = (kv)=>async function() {
         const list = kv.list({
             prefix: [
@@ -8340,27 +8340,51 @@ class PolicyStore {
     resolvePolicyByKind;
     set_policy;
 }
-const get_relay_members = (db)=>async ()=>{
-        if (!db) {
-            return new Error("get_relay_members is not supported");
-        }
+const get_space_members = (db)=>async ()=>{
         const rows = db.query("select event from events_v2 where kind = (?)", [
-            Kind_V2.RelayMember
+            Kind_V2.SpaceMember
         ]);
         const events = [];
         for (const row of rows){
-            const relay_member_event = parseJSON(row[0]);
-            if (relay_member_event instanceof Error) {
-                return relay_member_event;
+            const space_member_event = parseJSON(row[0]);
+            if (space_member_event instanceof Error) {
+                return space_member_event;
             }
-            events.push(relay_member_event);
+            events.push(space_member_event);
         }
-        if (events.length == 0) {
-            return;
+        return events;
+    };
+const add_space_member = (args)=>async (event)=>{
+        if (event.pubkey != args.admin.hex) {
+            return new Error("Only administrators can add members to the space.");
         }
-        const event = events.sort((e1, e2)=>e1.created_at - e2.created_at)[0];
-        console.log(event);
-        return event;
+        if (await is_space_member({
+            ...args
+        })(event.member)) {
+            return new Error(`${event.member} is already a member of the space.`);
+        }
+        try {
+            args.db.query(`INSERT INTO events_v2(id, pubkey, kind, event) VALUES (?, ?, ?, ?)`, [
+                event.id,
+                event.pubkey,
+                event.kind,
+                JSON.stringify(event)
+            ]);
+        } catch (e) {
+            return e;
+        }
+    };
+const is_space_member = (args)=>async (pubkey)=>{
+        if (args.admin.hex === pubkey) return true;
+        try {
+            const rows = args.db.query("select event from events_v2 where kind = (?) and json_extract(event, '$.member') = (?)", [
+                Kind_V2.SpaceMember,
+                pubkey
+            ]);
+            return rows.length > 0;
+        } catch (e) {
+            return e;
+        }
     };
 function RootResolver({ deps }) {
     return {
@@ -8392,17 +8416,6 @@ function Queries(deps) {
         channel: (args)=>{},
         deleted_events: async ()=>{
             return deps.get_deleted_event_ids();
-        },
-        members: async ()=>{
-            const members = await deps.get_relay_members();
-            if (members instanceof Error) {
-                console.error(members);
-                throw members;
-            }
-            if (members == undefined) {
-                return [];
-            }
-            return members.members;
         }
     };
 }
@@ -15967,6 +15980,184 @@ const supported_nips = [
     11
 ];
 export { supported_nips as supported_nips };
+class RelayInformationStore {
+    kv;
+    default_information;
+    constructor(kv, default_information){
+        this.kv = kv;
+        this.default_information = default_information;
+        this.resolveRelayInformation = async ()=>{
+            const entry = await this.kv.get([
+                "relay_information"
+            ]);
+            if (!entry.value) {
+                return {
+                    ...this.default_information,
+                    software,
+                    supported_nips
+                };
+            }
+            return {
+                ...this.default_information,
+                ...entry.value,
+                software,
+                supported_nips
+            };
+        };
+        this.set_relay_information = async (args)=>{
+            const old_information = await this.resolveRelayInformation();
+            if (old_information instanceof Error) {
+                return old_information;
+            }
+            const new_information = {
+                ...old_information,
+                ...args
+            };
+            await this.kv.set([
+                "relay_information"
+            ], new_information);
+            return {
+                ...this.default_information,
+                ...new_information,
+                software,
+                supported_nips
+            };
+        };
+    }
+    resolveRelayInformation;
+    set_relay_information;
+}
+async function run(args) {
+    let kv = args.kv;
+    if (kv == undefined) {
+        kv = await Deno.openKv();
+    }
+    let db;
+    let get_channel_by_id;
+    db = new DB("relayed.db");
+    db.execute(`${sqlite_schema}${event_schema_sqlite}`);
+    get_channel_by_id = get_channel_by_id_sqlite(db);
+    const write_replaceable_event = write_replaceable_event_sqlite(db);
+    const write_regular_event = write_regular_event_sqlite(db);
+    const get_event_count = get_event_count_sqlite(db);
+    const get_events_by_filter = get_events_by_filter_sqlite(db, args._debug || false);
+    if (args.admin == undefined) {
+        const env_pubkey = Deno.env.get(ENV_relayed_pubkey);
+        if (env_pubkey == undefined) {
+            return new Error("public key is not set. Please set env var $relayed_pubkey or pass default_information.pubkey in the argument");
+        }
+        const p = PublicKey.FromString(env_pubkey);
+        if (p instanceof Error) {
+            return p;
+        }
+        args.admin = p;
+    } else {
+        if (typeof args.admin == "string") {
+            const p = PublicKey.FromString(args.admin);
+            if (p instanceof Error) return p;
+            args.admin = p;
+        }
+    }
+    const { default_policy } = args;
+    const connections = new Map();
+    let resolve_hostname;
+    const hostname = new Promise((resolve)=>{
+        resolve_hostname = resolve;
+    });
+    const get_all_policies = Policies(kv);
+    const policyStore = new PolicyStore({
+        default_policy,
+        initial_policies: await get_all_policies(),
+        kv
+    });
+    const relayInformationStore = new RelayInformationStore(kv, {
+        ...args.default_information,
+        pubkey: args.admin
+    });
+    const port = args.port || 8000;
+    delete args.port;
+    const server = Deno.serve({
+        port,
+        onListen: ({ hostname, port })=>{
+            console.log(`☁  Relay server        started on   ws://${hostname}:${port}`);
+            console.log(`☁  Relay admin GraphQL started on http://${hostname}:${port}/api`);
+            resolve_hostname(hostname);
+        }
+    }, root_handler({
+        ...args,
+        delete_event: delete_event_sqlite(db),
+        delete_events_from_pubkey: async ()=>{
+            return [];
+        },
+        get_deleted_event_ids: async ()=>{
+            return [];
+        },
+        connections,
+        resolvePolicyByKind: policyStore.resolvePolicyByKind,
+        get_event_count,
+        get_events_by_filter,
+        write_regular_event,
+        write_replaceable_event,
+        policyStore,
+        relayInformationStore,
+        get_space_members: get_space_members(db),
+        add_space_member: add_space_member({
+            admin: args.admin,
+            db
+        }),
+        is_space_member: is_space_member({
+            admin: args.admin,
+            db
+        }),
+        create_channel: create_channel_sqlite(db),
+        edit_channel: edit_channel_sqlite(db),
+        kv: kv,
+        _debug: args._debug ? true : false
+    }));
+    const shutdown = async ()=>{
+        await server.shutdown();
+        for (const socket of connections.keys()){
+            socket.close();
+        }
+        console.log("close db");
+        kv.close();
+        db?.close();
+    };
+    return {
+        server,
+        ws_url: `ws://${await hostname}:${port}`,
+        http_url: `http://${await hostname}:${port}`,
+        shutdown,
+        set_policy: policyStore.set_policy,
+        get_policy: policyStore.resolvePolicyByKind,
+        default_policy: args.default_policy,
+        set_relay_information: relayInformationStore.set_relay_information,
+        get_relay_information: relayInformationStore.resolveRelayInformation,
+        get_event: async (id)=>{
+            const events = await get_events_by_filter({
+                ids: [
+                    id
+                ]
+            });
+            return events[0];
+        },
+        get_channel_by_id: (id)=>{
+            return get_channel_by_id(id);
+        },
+        get_space_members: get_space_members(db),
+        is_space_member: is_space_member({
+            admin: args.admin,
+            db
+        }),
+        add_space_member: add_space_member({
+            admin: args.admin,
+            db
+        }),
+        [Symbol.asyncDispose] () {
+            return shutdown();
+        }
+    };
+}
 function Landing(information) {
     return g(H, {
         children: [
@@ -16069,165 +16260,6 @@ function Landing(information) {
         ]
     });
 }
-class RelayInformationStore {
-    kv;
-    default_information;
-    constructor(kv, default_information){
-        this.kv = kv;
-        this.default_information = default_information;
-        this.resolveRelayInformation = async ()=>{
-            const entry = await this.kv.get([
-                "relay_information"
-            ]);
-            if (!entry.value) {
-                return {
-                    ...this.default_information,
-                    software,
-                    supported_nips
-                };
-            }
-            return {
-                ...this.default_information,
-                ...entry.value,
-                software,
-                supported_nips
-            };
-        };
-        this.set_relay_information = async (args)=>{
-            const old_information = await this.resolveRelayInformation();
-            if (old_information instanceof Error) {
-                return old_information;
-            }
-            const new_information = {
-                ...old_information,
-                ...args
-            };
-            await this.kv.set([
-                "relay_information"
-            ], new_information);
-            return {
-                ...this.default_information,
-                ...new_information,
-                software,
-                supported_nips
-            };
-        };
-    }
-    resolveRelayInformation;
-    set_relay_information;
-}
-async function run(args) {
-    let kv = args.kv;
-    if (kv == undefined) {
-        kv = await Deno.openKv();
-    }
-    let db;
-    let get_channel_by_id;
-    db = new DB("relayed.db");
-    db.execute(`${sqlite_schema}${event_schema_sqlite}`);
-    get_channel_by_id = get_channel_by_id_sqlite(db);
-    const write_replaceable_event = write_replaceable_event_sqlite(db);
-    const write_regular_event = write_regular_event_sqlite(db);
-    const get_event_count = get_event_count_sqlite(db);
-    const get_events_by_filter = get_events_by_filter_sqlite(db, args._debug || false);
-    if (args.admin == undefined) {
-        const env_pubkey = Deno.env.get(ENV_relayed_pubkey);
-        if (env_pubkey == undefined) {
-            return new Error("public key is not set. Please set env var $relayed_pubkey or pass default_information.pubkey in the argument");
-        }
-        const p = PublicKey.FromString(env_pubkey);
-        if (p instanceof Error) {
-            return p;
-        }
-        args.admin = p;
-    }
-    const { default_policy } = args;
-    const connections = new Map();
-    let resolve_hostname;
-    const hostname = new Promise((resolve)=>{
-        resolve_hostname = resolve;
-    });
-    const get_all_policies = Policies(kv);
-    const policyStore = new PolicyStore({
-        default_policy,
-        initial_policies: await get_all_policies(),
-        kv
-    });
-    const relayInformationStore = new RelayInformationStore(kv, {
-        ...args.default_information,
-        pubkey: args.admin
-    });
-    const port = args.port || 8000;
-    delete args.port;
-    const server = Deno.serve({
-        port,
-        onListen: ({ hostname, port })=>{
-            console.log(`☁  Relay server        started on   ws://${hostname}:${port}`);
-            console.log(`☁  Relay admin GraphQL started on http://${hostname}:${port}/api`);
-            resolve_hostname(hostname);
-        }
-    }, root_handler({
-        ...args,
-        is_member: is_member({
-            admin: args.admin,
-            policyStore
-        }),
-        delete_event: delete_event_sqlite(db),
-        delete_events_from_pubkey: async ()=>{
-            return [];
-        },
-        get_deleted_event_ids: async ()=>{
-            return [];
-        },
-        connections,
-        resolvePolicyByKind: policyStore.resolvePolicyByKind,
-        get_event_count,
-        get_events_by_filter,
-        write_regular_event,
-        write_replaceable_event,
-        policyStore,
-        relayInformationStore,
-        get_relay_members: get_relay_members(db),
-        create_channel: create_channel_sqlite(db),
-        edit_channel: edit_channel_sqlite(db),
-        kv: kv,
-        _debug: args._debug ? true : false
-    }));
-    const shutdown = async ()=>{
-        await server.shutdown();
-        for (const socket of connections.keys()){
-            socket.close();
-        }
-        console.log("close db");
-        kv.close();
-        db?.close();
-    };
-    return {
-        server,
-        ws_url: `ws://${await hostname}:${port}`,
-        http_url: `http://${await hostname}:${port}`,
-        shutdown,
-        set_policy: policyStore.set_policy,
-        get_policy: policyStore.resolvePolicyByKind,
-        default_policy: args.default_policy,
-        set_relay_information: relayInformationStore.set_relay_information,
-        get_relay_information: relayInformationStore.resolveRelayInformation,
-        get_event: async (id)=>{
-            const events = await get_events_by_filter({
-                ids: [
-                    id
-                ]
-            });
-            return events[0];
-        },
-        get_channel_by_id: (id)=>{
-            return get_channel_by_id(id);
-        },
-        [Symbol.asyncDispose] () {
-            return shutdown();
-        }
-    };
-}
 function atobSafe(data) {
     try {
         return atob(data);
@@ -16265,7 +16297,7 @@ const ws_handler = (args)=>async (req, info)=>{
                         socket.close(3000, "invalid auth event format");
                         return;
                     }
-                    const ok = await args.is_member(event.pubkey);
+                    const ok = await args.is_space_member(event.pubkey);
                     if (!ok) {
                         socket.close(3000, `pubkey ${event.pubkey} is not allowed`);
                         return;
@@ -16290,35 +16322,10 @@ const root_handler = (args)=>async (req, info)=>{
         }
         const url = new URL(req.url);
         if (url.pathname === "/api/auth/login") {
-            const body = await req.json();
-            if (!body) {
-                return new Response(`{"errors":"request body is null"}`, {
-                    status: 400
-                });
-            }
-            const error = await verifyToken(body, args.relayInformationStore);
-            if (error instanceof Error) {
-                return new Response(JSON.stringify(error.message), {
-                    status: 400
-                });
-            } else {
-                const auth = btoa(JSON.stringify(body));
-                const headers = new Headers();
-                const cookie = {
-                    name: "token",
-                    value: auth,
-                    path: "/",
-                    secure: true,
-                    httpOnly: true,
-                    sameSite: "Strict"
-                };
-                setCookie(headers, cookie);
-                const resp = new Response("", {
-                    status: 200,
-                    headers
-                });
-                return resp;
-            }
+            return graphql_login_handler(args)(req);
+        }
+        if (url.pathname == "/api/members") {
+            return members_handler(args);
         }
         if (url.pathname == "/api") {
             return graphql_handler(args)(req);
@@ -16345,41 +16352,7 @@ const root_handler = (args)=>async (req, info)=>{
                     }
                 }
             } else if (req.method == "POST") {
-                const text = await req.text();
-                const event = parseJSON(text);
-                if (event instanceof Error) {
-                    return new Response(event.message, {
-                        status: 400
-                    });
-                }
-                const ok = await verify_event_v2(event);
-                if (!ok) {
-                    return new Response("event is not valid", {
-                        status: 400
-                    });
-                }
-                if (event.kind == Kind_V2.ChannelCreation) {
-                    const ok = await args.create_channel(event);
-                    if (ok) {
-                        return new Response();
-                    } else {
-                        return new Response("failed to write event", {
-                            status: 400
-                        });
-                    }
-                } else if (event.kind == Kind_V2.ChannelEdition) {
-                    const res = await args.edit_channel(event);
-                    if (res instanceof Error) {
-                        return new Response(res.message, {
-                            status: 400
-                        });
-                    }
-                    return new Response();
-                } else {
-                    return new Response(`not a recognizable event`, {
-                        status: 400
-                    });
-                }
+                return event_v2_handler(args)(req);
             }
         }
         const resp = new Response(ve(Error404()), {
@@ -16388,6 +16361,54 @@ const root_handler = (args)=>async (req, info)=>{
         resp.headers.set("content-type", "html");
         return resp;
     };
+const graphql_login_handler = (args)=>async (req)=>{
+        const body = await req.json();
+        if (!body) {
+            return new Response(`{"errors":"request body is null"}`, {
+                status: 400
+            });
+        }
+        const error = await verifyToken(body, args.relayInformationStore);
+        if (error instanceof Error) {
+            return new Response(error.message, {
+                status: 400
+            });
+        } else {
+            const auth = btoa(JSON.stringify(body));
+            const headers = new Headers();
+            const cookie = {
+                name: "token",
+                value: auth,
+                path: "/",
+                secure: true,
+                httpOnly: true,
+                sameSite: "Strict"
+            };
+            setCookie(headers, cookie);
+            const resp = new Response("", {
+                status: 200,
+                headers
+            });
+            return resp;
+        }
+    };
+const members_handler = async (args)=>{
+    const members = await args.get_space_members();
+    if (members instanceof Error) {
+        console.error(members);
+        return new Response("", {
+            status: 500
+        });
+    }
+    const resp = new Response(JSON.stringify(members), {
+        status: 200
+    });
+    resp.headers.set("content-type", "application/json; charset=utf-8");
+    resp.headers.set("Access-Control-Allow-Origin", "*");
+    resp.headers.set("Access-Control-Allow-Methods", "GET");
+    resp.headers.set("Access-Control-Allow-Headers", "accept,content-type");
+    return resp;
+};
 const landing_handler = async (args)=>{
     const storeInformation = await args.relayInformationStore.resolveRelayInformation();
     if (storeInformation instanceof Error) {
@@ -16417,6 +16438,53 @@ const information_handler = async (args)=>{
     resp.headers.set("Access-Control-Allow-Headers", "accept,content-type");
     return resp;
 };
+const event_v2_handler = (args)=>async (req)=>{
+        const text = await req.text();
+        const event = parseJSON(text);
+        if (event instanceof Error) {
+            return new Response(event.message, {
+                status: 400
+            });
+        }
+        const ok = await verify_event_v2(event);
+        if (!ok) {
+            console.error("event", event);
+            return new Response("event is not valid", {
+                status: 400
+            });
+        }
+        if (event.kind == Kind_V2.ChannelCreation) {
+            const ok = await args.create_channel(event);
+            if (ok) {
+                return new Response();
+            } else {
+                return new Response("failed to write event", {
+                    status: 400
+                });
+            }
+        } else if (event.kind == Kind_V2.ChannelEdition) {
+            const res = await args.edit_channel(event);
+            if (res instanceof Error) {
+                return new Response(res.message, {
+                    status: 400
+                });
+            }
+            return new Response();
+        } else if (event.kind == Kind_V2.SpaceMember) {
+            const res = await args.add_space_member(event);
+            if (res instanceof Error) {
+                console.error(res);
+                return new Response(res.message, {
+                    status: 400
+                });
+            }
+            return new Response();
+        } else {
+            return new Response(`not a recognizable event`, {
+                status: 400
+            });
+        }
+    };
 async function verifyToken(event, relayInformationStore) {
     if (!await verifyEvent(event)) {
         return new Error("token not verified");
@@ -16433,23 +16501,6 @@ async function verifyToken(event, relayInformationStore) {
         return new Error("your pubkey is not an admin");
     }
 }
-const is_member = (args)=>async (pubkey)=>{
-        const { admin, policyStore } = args;
-        const key = PublicKey.FromString(pubkey);
-        if (key instanceof Error) {
-            return key;
-        }
-        if (key.hex == admin.hex) {
-            return true;
-        }
-        const policy = await policyStore.resolvePolicyByKind(NostrKind.TEXT_NOTE);
-        if (policy instanceof Error) {
-            return policy;
-        }
-        const policyAllow = policy.allow.has(pubkey);
-        const policyBlock = policy.block.has(pubkey);
-        return policyAllow && !policyBlock;
-    };
 const graphiql = `
 <!--
  *  Copyright (c) 2021 GraphQL Contributors
