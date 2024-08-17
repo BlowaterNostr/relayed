@@ -5,8 +5,6 @@ import { func_WriteRegularEvent, func_WriteReplaceableEvent } from "./resolvers/
 
 import { func_GetEventsByFilter } from "./resolvers/event.ts";
 import { func_DeleteEvent } from "./resolvers/event_deletion.ts";
-import { parseJSON } from "./nostr.ts/_helper.ts";
-import { PublicKey } from "./nostr.ts/key.ts";
 import {
     _RelayResponse_EOSE,
     _RelayResponse_Event,
@@ -19,8 +17,10 @@ import {
     NostrEvent,
     NostrFilter,
     NostrKind,
+    parseJSON,
+    PublicKey,
     verifyEvent,
-} from "./nostr.ts/nostr.ts";
+} from "@blowater/nostr-sdk";
 
 export const ws_handler = (
     args: {

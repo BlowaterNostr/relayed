@@ -30,7 +30,6 @@ import Landing from "./routes/landing.tsx";
 import Error404 from "./routes/_404.tsx";
 import { RelayInfomationBase, RelayInformation, RelayInformationStore } from "./resolvers/nip11.ts";
 import { Cookie, getCookies, setCookie } from "https://deno.land/std@0.224.0/http/cookie.ts";
-import { Event_V2, Kind_V2, NostrEvent, NostrKind, verify_event_v2, verifyEvent } from "./nostr.ts/nostr.ts";
 import {
     create_channel_sqlite,
     edit_channel_sqlite,
@@ -47,8 +46,8 @@ import {
     func_DeleteEventsFromPubkey,
     func_GetDeletedEventIDs,
 } from "./resolvers/event_deletion.ts";
-import { PublicKey } from "./nostr.ts/key.ts";
-import { parseJSON } from "./nostr.ts/_helper.ts";
+
+import { NostrEvent, NostrKind, parseJSON, PublicKey, v2, verifyEvent } from "@blowater/nostr-sdk";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
@@ -475,31 +474,31 @@ const event_v2_handler = (args: {
 }) =>
 async (req: Request) => {
     const text = await req.text();
-    const event = parseJSON<Event_V2>(text);
+    const event = parseJSON<v2.Event_V2>(text);
     if (event instanceof Error) {
         return new Response(event.message, {
             status: 400,
         });
     }
-    const ok = await verify_event_v2(event);
+    const ok = await v2.verify_event_v2(event);
     if (!ok) {
         console.error("event", event);
         return new Response("event is not valid", { status: 400 });
     }
-    if (event.kind == Kind_V2.ChannelCreation) {
+    if (event.kind == v2.Kind_V2.ChannelCreation) {
         const ok = await args.create_channel(event);
         if (ok) {
             return new Response();
         } else {
             return new Response("failed to write event", { status: 400 });
         }
-    } else if (event.kind == Kind_V2.ChannelEdition) {
+    } else if (event.kind == v2.Kind_V2.ChannelEdition) {
         const res = await args.edit_channel(event);
         if (res instanceof Error) {
             return new Response(res.message, { status: 400 });
         }
         return new Response();
-    } else if (event.kind == Kind_V2.SpaceMember) {
+    } else if (event.kind == v2.Kind_V2.SpaceMember) {
         const res = await args.add_space_member(event);
         if (res instanceof Error) {
             console.error(res);

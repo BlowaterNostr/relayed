@@ -1,9 +1,7 @@
 import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
 import { DefaultPolicy } from "../main.ts";
-import { Kind_V2, SpaceMember, verify_event_v2 } from "../nostr.ts/nostr.ts";
-import { parseJSON } from "../nostr.ts/_helper.ts";
-import { PublicKey } from "../nostr.ts/key.ts";
-import { NostrKind } from "../nostr.ts/nostr.ts";
+
+import { NostrKind, parseJSON, PublicKey, v2 } from "@blowater/nostr-sdk";
 
 export const Policies = (kv: Deno.Kv) =>
     async function () {
@@ -111,18 +109,18 @@ export class PolicyStore {
     };
 }
 
-export type func_GetSpaceMembers = () => Promise<SpaceMember[] | Error>;
-export type func_AddSpaceMember = (event: SpaceMember) => Promise<void | Error>;
+export type func_GetSpaceMembers = () => Promise<v2.SpaceMember[] | Error>;
+export type func_AddSpaceMember = (event: v2.SpaceMember) => Promise<void | Error>;
 export type func_IsSpaceMember = (pubkey: string) => Promise<boolean | Error>;
 
 export const get_space_members = (db: DB): func_GetSpaceMembers => async () => {
     const rows = db.query<[string]>(
         "select event from events_v2 where kind = (?)",
-        [Kind_V2.SpaceMember],
+        [v2.Kind_V2.SpaceMember],
     );
-    const events = [] as SpaceMember[];
+    const events = [] as v2.SpaceMember[];
     for (const row of rows) {
-        const space_member_event = parseJSON<SpaceMember>(row[0]);
+        const space_member_event = parseJSON<v2.SpaceMember>(row[0]);
         if (space_member_event instanceof Error) {
             return space_member_event;
         }
@@ -132,7 +130,7 @@ export const get_space_members = (db: DB): func_GetSpaceMembers => async () => {
 };
 
 export const add_space_member =
-    (args: { admin: PublicKey; db: DB }): func_AddSpaceMember => async (event: SpaceMember) => {
+    (args: { admin: PublicKey; db: DB }): func_AddSpaceMember => async (event: v2.SpaceMember) => {
         if (event.pubkey != args.admin.hex) {
             return new Error("Only administrators can add members to the space.");
         }
@@ -155,7 +153,7 @@ export const is_space_member =
         try {
             const rows = args.db.query<[string]>(
                 "select event from events_v2 where kind = (?) and json_extract(event, '$.member') = (?)",
-                [Kind_V2.SpaceMember, pubkey],
+                [v2.Kind_V2.SpaceMember, pubkey],
             );
             return rows.length > 0;
         } catch (e) {

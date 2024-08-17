@@ -1,5 +1,5 @@
+import { PublicKey } from "@blowater/nostr-sdk";
 import { software, supported_nips } from "../main.ts";
-import { PublicKey } from "../nostr.ts/key.ts";
 
 export type RelayInfomationBase = {
     name?: string;

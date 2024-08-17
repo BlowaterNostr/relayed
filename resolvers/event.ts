@@ -1,5 +1,5 @@
 import { DB, SqliteError } from "https://deno.land/x/sqlite@v3.8/mod.ts";
-import { NostrEvent, NostrFilter, NostrKind } from "../nostr.ts/nostr.ts";
+import { NostrEvent, NostrFilter, NostrKind } from "@blowater/nostr-sdk";
 
 export type func_GetEventsByIDs = (ids: Set<string>) => AsyncIterable<NostrEvent>;
 export type interface_GetEventsByIDs = {

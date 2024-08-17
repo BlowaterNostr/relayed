@@ -1,30 +1,30 @@
-import { ChannelCreation, ChannelEdition, Kind_V2 } from "./nostr.ts/nostr.ts";
+import { v2 } from "@blowater/nostr-sdk";
 import { DB, SqliteError } from "https://deno.land/x/sqlite@v3.8/mod.ts";
 
 export type func_GetChannelByName = (
     name: string,
-) => Promise<{ create: ChannelCreation; edit?: ChannelEdition } | undefined>;
+) => Promise<{ create: v2.ChannelCreation; edit?: v2.ChannelEdition } | undefined>;
 
 export type func_GetChannelByID = (
     id: string,
-) => Promise<{ create: ChannelCreation; edit?: ChannelEdition } | undefined>;
+) => Promise<{ create: v2.ChannelCreation; edit?: v2.ChannelEdition } | undefined>;
 
-export type func_CreateChannel = (event: ChannelCreation) => Promise<boolean>;
-export type func_EditChannel = (event: ChannelEdition) => Promise<void | Error>;
+export type func_CreateChannel = (event: v2.ChannelCreation) => Promise<boolean>;
+export type func_EditChannel = (event: v2.ChannelEdition) => Promise<void | Error>;
 
 export function channel_creation_key(id: string) {
-    return ["event_v2", Kind_V2.ChannelCreation, id];
+    return ["event_v2", v2.Kind_V2.ChannelCreation, id];
 }
 export function channel_edition_key(id: string) {
-    return ["event_v2", Kind_V2.ChannelEdition, id];
+    return ["event_v2", v2.Kind_V2.ChannelEdition, id];
 }
 
-export const create_channel_kv = (kv: Deno.Kv): func_CreateChannel => async (event: ChannelCreation) => {
+export const create_channel_kv = (kv: Deno.Kv): func_CreateChannel => async (event: v2.ChannelCreation) => {
     const result = await kv.set(channel_creation_key(event.id), event);
     return result.ok;
 };
 
-export const create_channel_sqlite = (db: DB): func_CreateChannel => async (event: ChannelCreation) => {
+export const create_channel_sqlite = (db: DB): func_CreateChannel => async (event: v2.ChannelCreation) => {
     const rows = db.query(
         `INSERT INTO channels (channel_id, name, creation_event) VALUES (?, ?, ?);`,
         [event.id, event.name, JSON.stringify(event)],
@@ -32,8 +32,8 @@ export const create_channel_sqlite = (db: DB): func_CreateChannel => async (even
     return true;
 };
 
-export const edit_channel_kv = (kv: Deno.Kv): func_EditChannel => async (event: ChannelEdition) => {
-    const chan = await kv.get<ChannelCreation>(channel_creation_key(event.channel_id));
+export const edit_channel_kv = (kv: Deno.Kv): func_EditChannel => async (event: v2.ChannelEdition) => {
+    const chan = await kv.get<v2.ChannelCreation>(channel_creation_key(event.channel_id));
     if (chan.value == null) {
         return new Error(`channel ${event.channel_id} does not exist`);
     }
@@ -49,7 +49,7 @@ export const edit_channel_kv = (kv: Deno.Kv): func_EditChannel => async (event: 
     }
 };
 
-export const edit_channel_sqlite = (db: DB): func_EditChannel => async (event: ChannelEdition) => {
+export const edit_channel_sqlite = (db: DB): func_EditChannel => async (event: v2.ChannelEdition) => {
     const channel = await get_channel_by_id_sqlite(db)(event.channel_id);
     if (channel == undefined) {
         return new Error(`channel ${event.channel_id} does not exist`);
@@ -71,11 +71,11 @@ export const edit_channel_sqlite = (db: DB): func_EditChannel => async (event: C
 };
 
 export const get_channel_by_id_kv = (kv: Deno.Kv): func_GetChannelByID => async (id: string) => {
-    const chan = await kv.get<ChannelCreation>(channel_creation_key(id));
+    const chan = await kv.get<v2.ChannelCreation>(channel_creation_key(id));
     if (chan.value == null) {
         return undefined;
     }
-    const chan_edit = await kv.get<ChannelEdition>(channel_edition_key(id));
+    const chan_edit = await kv.get<v2.ChannelEdition>(channel_edition_key(id));
     return {
         create: chan.value,
         edit: chan_edit.value || undefined,
