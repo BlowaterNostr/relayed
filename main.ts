@@ -30,7 +30,6 @@ import Landing from "./routes/landing.tsx";
 import Error404 from "./routes/_404.tsx";
 import { RelayInfomationBase, RelayInformation, RelayInformationStore } from "./resolvers/nip11.ts";
 import { Cookie, getCookies, setCookie } from "https://deno.land/std@0.224.0/http/cookie.ts";
-import { Event_V2, Kind_V2, NostrEvent, NostrKind, verify_event_v2, verifyEvent } from "./nostr.ts/nostr.ts";
 import {
     create_channel_sqlite,
     edit_channel_sqlite,
@@ -47,8 +46,10 @@ import {
     func_DeleteEventsFromPubkey,
     func_GetDeletedEventIDs,
 } from "./resolvers/event_deletion.ts";
-import { PublicKey } from "./nostr.ts/key.ts";
-import { parseJSON } from "./nostr.ts/_helper.ts";
+import { parseJSON } from "https://jsr.io/@blowater/nostr-sdk/0.0.12/_helper.ts";
+import { PublicKey } from "https://jsr.io/@blowater/nostr-sdk/0.0.12/key.ts";
+import { NostrEvent, NostrKind, verifyEvent } from "@blowater/nostr-sdk";
+import { Event_V2, Kind_V2, verify_event_v2 } from "https://jsr.io/@blowater/nostr-sdk/0.0.12/v2.ts";
 
 const schema = gql.buildSchema(gql.print(typeDefs));
 
