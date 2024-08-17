@@ -16,11 +16,10 @@ import {
     RelayResponse_Event,
     SingleRelayConnection,
     SubscriptionStream,
+    v2,
 } from "@blowater/nostr-sdk";
 
 import { sleep } from "jsr:@blowater/csp@1.0.0";
-
-import { prepareSpaceMember } from "https://jsr.io/@blowater/nostr-sdk/0.0.12/space-member.ts";
 
 const test_kv = async () => {
     try {
@@ -310,7 +309,7 @@ Deno.test({
 
         await t.step("a member is allowed", async () => {
             const user = InMemoryAccountContext.Generate();
-            const spaceMemberEvennt = await prepareSpaceMember(ctx, user.publicKey.hex);
+            const spaceMemberEvennt = await v2.prepareSpaceMember(ctx, user.publicKey.hex);
             if (spaceMemberEvennt instanceof Error) fail(spaceMemberEvennt.message);
             await relay.add_space_member(spaceMemberEvennt);
             const client = SingleRelayConnection.New(relay.ws_url, {

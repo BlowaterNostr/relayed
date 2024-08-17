@@ -1,9 +1,8 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/assert_equals.ts";
 import { fail } from "https://deno.land/std@0.224.0/assert/fail.ts";
 import { format } from "@std/datetime";
-import { RFC3339 } from "https://jsr.io/@blowater/nostr-sdk/0.0.12/_helper.ts";
-import { InMemoryAccountContext } from "@blowater/nostr-sdk";
-import { ChannelCreation, ChannelEdition, Kind_V2 } from "https://jsr.io/@blowater/nostr-sdk/0.0.12/v2.ts";
+
+import { InMemoryAccountContext, RFC3339, v2 } from "@blowater/nostr-sdk";
 import { run } from "../main.ts";
 
 const test_ctx = InMemoryAccountContext.Generate();
@@ -34,9 +33,9 @@ Deno.test({
 
         {
             const ctx = InMemoryAccountContext.Generate();
-            const ChannelCreation_event: ChannelCreation = await ctx.signEventV2({
+            const ChannelCreation_event: v2.ChannelCreation = await ctx.signEventV2({
                 pubkey: ctx.publicKey.hex,
-                kind: Kind_V2.ChannelCreation,
+                kind: v2.Kind_V2.ChannelCreation,
                 name: "test",
                 scope: "server",
                 created_at: format(new Date(), RFC3339),
@@ -51,14 +50,14 @@ Deno.test({
             // get the channel
             const chan = await relay.get_channel_by_id(ChannelCreation_event.id);
             assertEquals(chan, {
-                create: ChannelCreation_event as ChannelCreation,
+                create: ChannelCreation_event as v2.ChannelCreation,
                 edit: undefined,
             });
 
             // edit the channel
             const event_edit = await ctx.signEventV2({
                 pubkey: ctx.publicKey.hex,
-                kind: Kind_V2.ChannelEdition,
+                kind: v2.Kind_V2.ChannelEdition,
                 channel_id: ChannelCreation_event.id,
                 name: "test2",
                 scope: "server",
@@ -74,8 +73,8 @@ Deno.test({
             // get the channel
             const chan2 = await relay.get_channel_by_id(ChannelCreation_event.id);
             assertEquals(chan2, {
-                create: ChannelCreation_event as ChannelCreation,
-                edit: event_edit as ChannelEdition,
+                create: ChannelCreation_event as v2.ChannelCreation,
+                edit: event_edit as v2.ChannelEdition,
             });
         }
         await relay.shutdown();

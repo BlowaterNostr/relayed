@@ -18,7 +18,7 @@
         "**/_fresh/*"
     ],
     "imports": {
-        "@blowater/nostr-sdk": "jsr:@blowater/nostr-sdk@^0.0.12",
+        "@blowater/nostr-sdk": "jsr:@blowater/nostr-sdk@^0.0.13",
         "@std/datetime": "jsr:@std/datetime@^0.224.5",
         "preact": "https://esm.sh/preact@10.19.6",
         "preact/": "https://esm.sh/preact@10.19.6/",
