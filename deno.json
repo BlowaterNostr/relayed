@@ -9,8 +9,7 @@
                 "require-await",
                 "require-yield",
                 "no-unused-vars",
-                "no-empty",
-                "mod.ts"
+                "no-empty"
             ]
         }
     },
@@ -35,7 +34,6 @@
         ],
         "noImplicitAny": false
     },
-    "nodeModulesDir": true,
     "fmt": {
         "indentWidth": 4,
         "lineWidth": 110,

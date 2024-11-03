@@ -1,5 +1,5 @@
 import { v2 } from "@blowater/nostr-sdk";
-import { DB, SqliteError } from "https://deno.land/x/sqlite@v3.8/mod.ts";
+import { DB, SqliteError } from "https://deno.land/x/sqlite@v3.9.1/mod.ts";
 
 export type func_GetChannelByName = (
     name: string,

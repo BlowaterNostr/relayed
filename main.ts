@@ -39,7 +39,7 @@ import {
     get_channel_by_id_sqlite,
     sqlite_schema,
 } from "./channel.ts";
-import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
+import { DB } from "https://deno.land/x/sqlite@v3.9.1/mod.ts";
 import {
     delete_event_sqlite,
     func_DeleteEvent,
